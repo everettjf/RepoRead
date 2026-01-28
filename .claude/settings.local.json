@@ -2,7 +2,14 @@
   "permissions": {
     "allow": [
       "Bash(cargo check:*)",
-      "Bash(/bin/bash -c:*)"
+      "Bash(/bin/bash -c:*)",
+      "Bash(npx tsc:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(rustfmt:*)",
+      "Bash(bun run build:*)",
+      "Bash(bun run tauri:*)",
+      "Bash(/bin/rm:*)"
     ]
   }
 }

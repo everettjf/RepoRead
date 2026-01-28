@@ -74,6 +74,7 @@ pub struct FileContent {
     pub truncated: bool,
     pub total_lines: Option<usize>,
     pub language: String,
+    pub is_binary: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -300,10 +301,55 @@ pub fn detect_language(file_path: &str) -> String {
     }.to_string()
 }
 
+fn is_binary_extension(file_path: &Path) -> bool {
+    let ext = file_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    matches!(
+        ext.as_str(),
+        // Images
+        "png" | "jpg" | "jpeg" | "gif" | "bmp" | "ico" | "webp" | "svg" | "tiff" | "tif" |
+        // Audio
+        "mp3" | "wav" | "ogg" | "flac" | "aac" | "m4a" |
+        // Video
+        "mp4" | "avi" | "mov" | "mkv" | "webm" | "flv" |
+        // Archives
+        "zip" | "tar" | "gz" | "rar" | "7z" | "bz2" | "xz" |
+        // Executables/Libraries
+        "exe" | "dll" | "so" | "dylib" | "bin" | "o" | "a" |
+        // Documents
+        "pdf" | "doc" | "docx" | "xls" | "xlsx" | "ppt" | "pptx" |
+        // Fonts
+        "ttf" | "otf" | "woff" | "woff2" | "eot" |
+        // Other binary
+        "class" | "pyc" | "pyo" | "wasm" | "db" | "sqlite" | "sqlite3"
+    )
+}
+
+fn contains_null_bytes(data: &[u8]) -> bool {
+    // Check first 8KB for null bytes (common binary file indicator)
+    let check_size = std::cmp::min(data.len(), 8192);
+    data[..check_size].contains(&0)
+}
+
 pub fn read_file_content(file_path: &Path) -> Result<FileContent, RepoError> {
     let metadata = fs::metadata(file_path)?;
     let file_size = metadata.len();
     let language = detect_language(&file_path.to_string_lossy());
+
+    // Check if it's a known binary extension
+    if is_binary_extension(file_path) {
+        return Ok(FileContent {
+            content: String::new(),
+            truncated: false,
+            total_lines: None,
+            language,
+            is_binary: true,
+        });
+    }
 
     // Check file size
     if file_size > MAX_FILE_SIZE {
@@ -313,6 +359,17 @@ pub fn read_file_content(file_path: &Path) -> Result<FileContent, RepoError> {
         let bytes_read = file.read(&mut buffer)?;
         buffer.truncate(bytes_read);
 
+        // Check for binary content
+        if contains_null_bytes(&buffer) {
+            return Ok(FileContent {
+                content: String::new(),
+                truncated: false,
+                total_lines: None,
+                language,
+                is_binary: true,
+            });
+        }
+
         let content = String::from_utf8_lossy(&buffer);
         let lines: Vec<&str> = content.lines().take(PREVIEW_LINES).collect();
 
@@ -321,10 +378,24 @@ pub fn read_file_content(file_path: &Path) -> Result<FileContent, RepoError> {
             truncated: true,
             total_lines: None,
             language,
+            is_binary: false,
         });
     }
 
-    let content = fs::read_to_string(file_path)?;
+    // Read file as bytes first to check for binary content
+    let bytes = fs::read(file_path)?;
+
+    if contains_null_bytes(&bytes) {
+        return Ok(FileContent {
+            content: String::new(),
+            truncated: false,
+            total_lines: None,
+            language,
+            is_binary: true,
+        });
+    }
+
+    let content = String::from_utf8_lossy(&bytes).into_owned();
     let line_count = content.lines().count();
 
     if line_count > MAX_LINES {
@@ -334,6 +405,7 @@ pub fn read_file_content(file_path: &Path) -> Result<FileContent, RepoError> {
             truncated: true,
             total_lines: Some(line_count),
             language,
+            is_binary: false,
         })
     } else {
         Ok(FileContent {
@@ -341,6 +413,7 @@ pub fn read_file_content(file_path: &Path) -> Result<FileContent, RepoError> {
             truncated: false,
             total_lines: Some(line_count),
             language,
+            is_binary: false,
         })
     }
 }

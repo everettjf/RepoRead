@@ -169,6 +169,7 @@ function App() {
             content={fileContent}
             filePath={selectedPath}
             isLoading={isLoadingFile}
+            repoInfo={currentRepo}
           />
         </main>
       </div>

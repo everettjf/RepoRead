@@ -26,4 +26,5 @@ export interface FileContent {
   truncated: boolean;
   total_lines?: number;
   language: string;
+  is_binary: boolean;
 }

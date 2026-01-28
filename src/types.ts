@@ -28,3 +28,12 @@ export interface FileContent {
   language: string;
   is_binary: boolean;
 }
+
+export interface SearchResultItem {
+  full_name: string;
+  description: string | null;
+  stargazers_count: number;
+  html_url: string;
+  owner: string;
+  repo: string;
+}

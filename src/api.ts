@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { FileNode, RepoInfo, ImportResult, FileContent } from "./types";
+import type { FileNode, RepoInfo, ImportResult, FileContent, SearchResultItem } from "./types";
 
 export async function importRepoFromGithub(url: string): Promise<ImportResult> {
   return invoke<ImportResult>("import_repo_from_github", { url });
@@ -27,4 +27,8 @@ export async function deleteRepo(repoKey: string): Promise<void> {
 
 export async function getFileLanguage(filePath: string): Promise<string> {
   return invoke<string>("get_file_language", { filePath });
+}
+
+export async function searchGithubRepos(query: string): Promise<SearchResultItem[]> {
+  return invoke<SearchResultItem[]>("search_github_repos", { query });
 }

@@ -82,6 +82,79 @@ struct GitHubRepoResponse {
     default_branch: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchResultItem {
+    pub full_name: String,
+    pub description: Option<String>,
+    pub stargazers_count: u64,
+    pub html_url: String,
+    pub owner: String,
+    pub repo: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GitHubSearchResponse {
+    items: Vec<GitHubSearchItem>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GitHubSearchItem {
+    full_name: String,
+    description: Option<String>,
+    stargazers_count: u64,
+    html_url: String,
+    owner: GitHubOwner,
+    name: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GitHubOwner {
+    login: String,
+}
+
+pub async fn search_github_repos(query: &str) -> Result<Vec<SearchResultItem>, RepoError> {
+    if query.trim().is_empty() {
+        return Ok(vec![]);
+    }
+
+    let client = reqwest::Client::new();
+    let url = format!(
+        "https://api.github.com/search/repositories?q={}&per_page=15&sort=stars&order=desc",
+        urlencoding::encode(query)
+    );
+
+    let response = client
+        .get(&url)
+        .header("User-Agent", "RepoView/0.1")
+        .header("Accept", "application/vnd.github.v3+json")
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        return Err(RepoError::InvalidUrl(format!(
+            "GitHub API error: HTTP {}",
+            response.status()
+        )));
+    }
+
+    let search_response: GitHubSearchResponse = response.json().await?;
+
+    let results = search_response
+        .items
+        .into_iter()
+        .map(|item| SearchResultItem {
+            full_name: item.full_name,
+            description: item.description,
+            stargazers_count: item.stargazers_count,
+            html_url: item.html_url,
+            owner: item.owner.login,
+            repo: item.name,
+        })
+        .collect();
+
+    Ok(results)
+}
+
 pub fn parse_github_url(url: &str) -> Result<ParsedGitHubUrl, RepoError> {
     let url = url.trim().trim_end_matches('/');
 

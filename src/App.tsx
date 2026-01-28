@@ -9,11 +9,68 @@ import {
   listRecentRepos,
   getRepoTree,
   deleteRepo,
+  searchGithubRepos,
 } from "./api";
-import type { FileNode, RepoInfo, FileContent } from "./types";
+import type { FileNode, RepoInfo, FileContent, SearchResultItem } from "./types";
 import "./App.css";
 
 type View = "home" | "repo";
+
+function formatStars(count: number): string {
+  if (count >= 1000) {
+    return (count / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+  }
+  return String(count);
+}
+
+function SearchResults({
+  results,
+  onImport,
+  importingRepo,
+}: {
+  results: SearchResultItem[];
+  onImport: (item: SearchResultItem) => void;
+  importingRepo: string | null;
+}) {
+  if (results.length === 0) return null;
+
+  return (
+    <div className="search-results">
+      <h3>Search Results</h3>
+      <div className="search-items">
+        {results.map((item) => (
+          <div key={item.full_name} className="search-item">
+            <div className="search-item-info">
+              <div className="search-item-header">
+                <span className="search-item-name">{item.full_name}</span>
+                <span className="search-item-stars">
+                  ⭐ {formatStars(item.stargazers_count)}
+                </span>
+              </div>
+              {item.description && (
+                <p className="search-item-desc">{item.description}</p>
+              )}
+            </div>
+            <button
+              className="search-item-import"
+              onClick={() => onImport(item)}
+              disabled={importingRepo === item.full_name}
+            >
+              {importingRepo === item.full_name ? (
+                <>
+                  <span className="spinner small"></span>
+                  Importing...
+                </>
+              ) : (
+                "Import"
+              )}
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function App() {
   const [view, setView] = useState<View>("home");
@@ -25,6 +82,12 @@ function App() {
   const [isImporting, setIsImporting] = useState(false);
   const [isLoadingFile, setIsLoadingFile] = useState(false);
   const [error, setError] = useState<string>("");
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [importingRepo, setImportingRepo] = useState<string | null>(null);
 
   // Load recent repos on mount
   useEffect(() => {
@@ -40,6 +103,45 @@ function App() {
     }
   };
 
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery.trim() || isSearching) return;
+
+    setIsSearching(true);
+    setError("");
+
+    try {
+      const results = await searchGithubRepos(searchQuery);
+      setSearchResults(results);
+    } catch (err) {
+      setError(String(err));
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleSearchImport = async (item: SearchResultItem) => {
+    setImportingRepo(item.full_name);
+    setError("");
+
+    try {
+      const result = await importRepoFromGithub(item.html_url);
+      setCurrentRepo(result.info);
+      setTree(result.tree);
+      setView("repo");
+      setSelectedPath("");
+      setFileContent(null);
+      setSearchResults([]);
+      setSearchQuery("");
+      await loadRecentRepos();
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setImportingRepo(null);
+    }
+  };
+
   const handleImport = async (url: string) => {
     setIsImporting(true);
     setError("");
@@ -51,6 +153,8 @@ function App() {
       setView("repo");
       setSelectedPath("");
       setFileContent(null);
+      setSearchResults([]);
+      setSearchQuery("");
       await loadRecentRepos();
     } catch (err) {
       setError(String(err));
@@ -128,7 +232,48 @@ function App() {
         </header>
 
         <main className="home-content">
+          {/* Search Section */}
+          <div className="search-section">
+            <form className="search-form" onSubmit={handleSearch}>
+              <input
+                type="text"
+                className="search-input"
+                placeholder="Search GitHub repositories..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                disabled={isSearching}
+              />
+              <button
+                type="submit"
+                className="search-submit"
+                disabled={isSearching || !searchQuery.trim()}
+              >
+                {isSearching ? (
+                  <>
+                    <span className="spinner small"></span>
+                    Searching...
+                  </>
+                ) : (
+                  "Search"
+                )}
+              </button>
+            </form>
+          </div>
+
+          {/* Search Results */}
+          <SearchResults
+            results={searchResults}
+            onImport={handleSearchImport}
+            importingRepo={importingRepo}
+          />
+
+          {/* Divider when search results exist */}
+          {searchResults.length > 0 && <div className="section-divider" />}
+
+          {/* URL Input */}
           <UrlInput onSubmit={handleImport} isLoading={isImporting} error={error} />
+
+          {/* Recent Repos */}
           <RepoList
             repos={recentRepos}
             onSelect={handleRepoSelect}

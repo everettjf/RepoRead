@@ -4,7 +4,8 @@ use repo::{
     build_file_tree, delete_repo as delete_repo_impl, detect_language, download_repo_zip,
     extract_zip, generate_repo_key, get_default_branch, get_repos_dir, list_repos as list_repos_impl,
     load_repo_info, load_tree, parse_github_url, read_file_content, save_repo_info, save_tree,
-    FileContent, FileNode, ImportResult, RepoError, RepoInfo,
+    search_github_repos as search_repos_impl,
+    FileContent, FileNode, ImportResult, RepoError, RepoInfo, SearchResultItem,
 };
 
 #[tauri::command]
@@ -87,6 +88,11 @@ fn get_file_language(file_path: String) -> String {
     detect_language(&file_path)
 }
 
+#[tauri::command]
+async fn search_github_repos(query: String) -> Result<Vec<SearchResultItem>, RepoError> {
+    search_repos_impl(&query).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -99,6 +105,7 @@ pub fn run() {
             get_repo_info,
             delete_repo,
             get_file_language,
+            search_github_repos,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

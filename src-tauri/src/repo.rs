@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use scraper::{Html, Selector};
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -112,6 +113,19 @@ struct GitHubOwner {
     login: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrendingRepo {
+    pub full_name: String,
+    pub description: Option<String>,
+    pub stars: Option<u64>,
+    pub forks: Option<u64>,
+    pub language: Option<String>,
+    pub stars_today: Option<u64>,
+    pub url: String,
+    pub owner: String,
+    pub repo: String,
+}
+
 pub async fn search_github_repos(query: &str, token: Option<&str>) -> Result<Vec<SearchResultItem>, RepoError> {
     if query.trim().is_empty() {
         return Ok(vec![]);
@@ -162,6 +176,145 @@ pub async fn search_github_repos(query: &str, token: Option<&str>) -> Result<Vec
     Ok(results)
 }
 
+fn parse_number(text: &str) -> Option<u64> {
+    let digits: String = text
+        .chars()
+        .filter(|c| c.is_ascii_digit())
+        .collect();
+    if digits.is_empty() {
+        None
+    } else {
+        digits.parse::<u64>().ok()
+    }
+}
+
+fn element_text(element: &scraper::ElementRef<'_>) -> String {
+    element.text().collect::<Vec<_>>().join("").trim().to_string()
+}
+
+pub async fn fetch_trending_repos(
+    language: Option<&str>,
+    since: &str,
+    spoken_language: Option<&str>,
+) -> Result<Vec<TrendingRepo>, RepoError> {
+    let mut url = if let Some(lang) = language {
+        let lang = lang.trim();
+        if lang.is_empty() {
+            "https://github.com/trending".to_string()
+        } else {
+            format!("https://github.com/trending/{}", urlencoding::encode(lang))
+        }
+    } else {
+        "https://github.com/trending".to_string()
+    };
+
+    let mut params = Vec::new();
+    if !since.trim().is_empty() {
+        params.push(format!("since={}", since.trim()));
+    }
+    if let Some(code) = spoken_language {
+        let code = code.trim();
+        if !code.is_empty() {
+            params.push(format!("spoken_language_code={}", code));
+        }
+    }
+    if !params.is_empty() {
+        url.push('?');
+        url.push_str(&params.join("&"));
+    }
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get(&url)
+        .header("User-Agent", "RepoView/0.1")
+        .header("Accept", "text/html")
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        return Err(RepoError::InvalidUrl(format!(
+            "GitHub Trending error: HTTP {}",
+            response.status()
+        )));
+    }
+
+    let html = response.text().await?;
+    let document = Html::parse_document(&html);
+    let article_selector = Selector::parse("article.Box-row").unwrap();
+    let title_selector = Selector::parse("h2 a").unwrap();
+    let desc_selector = Selector::parse("p.col-9").unwrap();
+    let lang_selector = Selector::parse("span[itemprop=\"programmingLanguage\"]").unwrap();
+    let stars_selector = Selector::parse("a[href$=\"/stargazers\"]").unwrap();
+    let forks_selector = Selector::parse("a[href$=\"/forks\"]").unwrap();
+    let today_selector = Selector::parse("span.d-inline-block.float-sm-right").unwrap();
+
+    let mut results = Vec::new();
+
+    for article in document.select(&article_selector) {
+        let link = match article.select(&title_selector).next() {
+            Some(link) => link,
+            None => continue,
+        };
+        let href = match link.value().attr("href") {
+            Some(href) => href.trim(),
+            None => continue,
+        };
+        let href = href.trim_start_matches('/');
+        let mut parts = href.split('/');
+        let owner = match parts.next() {
+            Some(owner) if !owner.is_empty() => owner.to_string(),
+            _ => continue,
+        };
+        let repo = match parts.next() {
+            Some(repo) if !repo.is_empty() => repo.to_string(),
+            _ => continue,
+        };
+        let full_name = format!("{}/{}", owner, repo);
+        let url = format!("https://github.com/{}/{}", owner, repo);
+
+        let description = article
+            .select(&desc_selector)
+            .next()
+            .map(|el| element_text(&el))
+            .filter(|text| !text.is_empty());
+
+        let language = article
+            .select(&lang_selector)
+            .next()
+            .map(|el| element_text(&el))
+            .filter(|text| !text.is_empty());
+
+        let stars = article
+            .select(&stars_selector)
+            .next()
+            .and_then(|el| parse_number(&element_text(&el)));
+
+        let forks = article
+            .select(&forks_selector)
+            .next()
+            .and_then(|el| parse_number(&element_text(&el)));
+
+        let stars_today = article
+            .select(&today_selector)
+            .next()
+            .and_then(|el| parse_number(&element_text(&el)));
+
+        results.push(TrendingRepo {
+            full_name,
+            description,
+            stars,
+            forks,
+            language,
+            stars_today,
+            url,
+            owner,
+            repo,
+        });
+    }
+
+    Ok(results)
+}
+
 // Settings management
 fn get_settings_path() -> PathBuf {
     directories::ProjectDirs::from("com", "xnu", "RepoView")
@@ -191,6 +344,89 @@ pub fn save_settings(settings: &AppSettings) -> Result<(), RepoError> {
     }
     let json = serde_json::to_string_pretty(settings)?;
     fs::write(path, json)?;
+    Ok(())
+}
+
+fn get_favorites_path() -> PathBuf {
+    directories::ProjectDirs::from("com", "xnu", "RepoView")
+        .map(|dirs| dirs.config_dir().to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("./config"))
+        .join("favorites.json")
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FavoriteRepo {
+    pub owner: String,
+    pub repo: String,
+    pub url: String,
+    pub description: Option<String>,
+    pub language: Option<String>,
+    pub stars: Option<u64>,
+    pub added_at: String,
+}
+
+pub fn load_favorites() -> Vec<FavoriteRepo> {
+    let path = get_favorites_path();
+    if let Ok(content) = fs::read_to_string(&path) {
+        serde_json::from_str(&content).unwrap_or_default()
+    } else {
+        Vec::new()
+    }
+}
+
+pub fn save_favorites(favorites: &[FavoriteRepo]) -> Result<(), RepoError> {
+    let path = get_favorites_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let json = serde_json::to_string_pretty(favorites)?;
+    fs::write(path, json)?;
+    Ok(())
+}
+
+pub fn export_favorites(path: &Path, format: &str) -> Result<(), RepoError> {
+    let favorites = load_favorites();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    match format {
+        "json" => {
+            let json = serde_json::to_string_pretty(&favorites)?;
+            fs::write(path, json)?;
+        }
+        "markdown" => {
+            let mut out = String::new();
+            out.push_str("# RepoView Favorites\n\n");
+            for fav in favorites {
+                let desc = fav
+                    .description
+                    .as_ref()
+                    .map(|d| format!(" — {}", d.trim()))
+                    .unwrap_or_default();
+                let lang = fav
+                    .language
+                    .as_ref()
+                    .map(|l| format!(" · {}", l))
+                    .unwrap_or_default();
+                out.push_str(&format!(
+                    "- [{}]({}){}{}\n",
+                    format!("{}/{}", fav.owner, fav.repo),
+                    fav.url,
+                    desc,
+                    lang
+                ));
+            }
+            fs::write(path, out)?;
+        }
+        _ => {
+            return Err(RepoError::InvalidUrl(format!(
+                "Unsupported export format: {}",
+                format
+            )));
+        }
+    }
+
     Ok(())
 }
 

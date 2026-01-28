@@ -41,3 +41,25 @@ export interface SearchResultItem {
 export interface AppSettings {
   github_token: string | null;
 }
+
+export interface TrendingRepo {
+  full_name: string;
+  description: string | null;
+  stars?: number | null;
+  forks?: number | null;
+  language?: string | null;
+  stars_today?: number | null;
+  url: string;
+  owner: string;
+  repo: string;
+}
+
+export interface FavoriteRepo {
+  owner: string;
+  repo: string;
+  url: string;
+  description: string | null;
+  language: string | null;
+  stars: number | null;
+  added_at: string;
+}

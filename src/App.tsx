@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { save } from "@tauri-apps/plugin-dialog";
 import { FileTree } from "./components/FileTree";
 import { CodeViewer } from "./components/CodeViewer";
 import { RepoList } from "./components/RepoList";
@@ -12,17 +13,37 @@ import {
   searchGithubRepos,
   getSettings,
   updateSettings,
+  getTrendingRepos,
+  getFavorites,
+  saveFavorites,
+  exportFavorites,
 } from "./api";
-import type { FileNode, RepoInfo, FileContent, SearchResultItem, AppSettings } from "./types";
+import type {
+  FileNode,
+  RepoInfo,
+  FileContent,
+  SearchResultItem,
+  AppSettings,
+  TrendingRepo,
+  FavoriteRepo,
+} from "./types";
 import "./App.css";
 
 type View = "home" | "repo" | "settings";
+type HomeTab = "home" | "trending" | "favorites";
 
 function formatStars(count: number): string {
   if (count >= 1000) {
     return (count / 1000).toFixed(1).replace(/\.0$/, "") + "k";
   }
   return String(count);
+}
+
+function formatExportTimestamp(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(
+    date.getHours()
+  )}${pad(date.getMinutes())}`;
 }
 
 // Check if input looks like a GitHub URL
@@ -81,6 +102,118 @@ function SearchResults({
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function TrendingList({
+  items,
+  onImport,
+  onFavorite,
+  importingRepo,
+}: {
+  items: TrendingRepo[];
+  onImport: (item: TrendingRepo) => void;
+  onFavorite: (item: TrendingRepo) => void;
+  importingRepo: string | null;
+}) {
+  if (items.length === 0) {
+    return <p className="empty-state">No trending repositories found.</p>;
+  }
+
+  return (
+    <div className="trending-list">
+      {items.map((item) => (
+        <div key={item.full_name} className="trending-item">
+          <div className="trending-item-info">
+            <div className="trending-item-header">
+              <span className="trending-item-name">{item.full_name}</span>
+              {typeof item.stars === "number" && (
+                <span className="trending-item-stars">⭐ {formatStars(item.stars)}</span>
+              )}
+            </div>
+            {item.description && <p className="trending-item-desc">{item.description}</p>}
+            <div className="trending-item-meta">
+              {item.language && <span>{item.language}</span>}
+              {typeof item.forks === "number" && <span>🍴 {formatStars(item.forks)}</span>}
+              {typeof item.stars_today === "number" && (
+                <span>✨ {formatStars(item.stars_today)} today</span>
+              )}
+            </div>
+          </div>
+          <div className="trending-item-actions">
+            <button
+              className="trending-item-import"
+              onClick={() => onImport(item)}
+              disabled={importingRepo === item.full_name}
+            >
+              {importingRepo === item.full_name ? (
+                <>
+                  <span className="spinner small"></span>
+                  Importing...
+                </>
+              ) : (
+                "Open"
+              )}
+            </button>
+            <button className="trending-item-favorite" onClick={() => onFavorite(item)}>
+              Save
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FavoritesList({
+  items,
+  onOpen,
+  onRemove,
+}: {
+  items: FavoriteRepo[];
+  onOpen: (item: FavoriteRepo) => void;
+  onRemove: (item: FavoriteRepo) => void;
+}) {
+  if (items.length === 0) {
+    return (
+      <div className="empty-state favorites-empty">
+        <div className="empty-icon">⭐</div>
+        <h3>No favorites yet</h3>
+        <p>Save repositories from Trending to keep them here.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="favorites-list">
+      {items.map((item) => (
+        <div key={`${item.owner}/${item.repo}`} className="favorites-item">
+          <div className="favorites-item-info">
+            <div className="favorites-item-header">
+              <span className="favorites-item-name">
+                {item.owner}/{item.repo}
+              </span>
+              {typeof item.stars === "number" && (
+                <span className="favorites-item-stars">⭐ {formatStars(item.stars)}</span>
+              )}
+            </div>
+            {item.description && <p className="favorites-item-desc">{item.description}</p>}
+            <div className="favorites-item-meta">
+              {item.language && <span>{item.language}</span>}
+              <span>{new Date(item.added_at).toLocaleString()}</span>
+            </div>
+          </div>
+          <div className="favorites-item-actions">
+            <button className="favorites-item-open" onClick={() => onOpen(item)}>
+              Open
+            </button>
+            <button className="favorites-item-remove" onClick={() => onRemove(item)}>
+              Remove
+            </button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -172,6 +305,7 @@ function SettingsPage({
 
 function App() {
   const [view, setView] = useState<View>("home");
+  const [homeTab, setHomeTab] = useState<HomeTab>("home");
   const [recentRepos, setRecentRepos] = useState<RepoInfo[]>([]);
   const [currentRepo, setCurrentRepo] = useState<RepoInfo | null>(null);
   const [tree, setTree] = useState<FileNode | null>(null);
@@ -189,11 +323,32 @@ function App() {
   // Settings
   const [settings, setSettings] = useState<AppSettings>({ github_token: null });
 
+  // Trending
+  const [trendingItems, setTrendingItems] = useState<TrendingRepo[]>([]);
+  const [trendingSince, setTrendingSince] = useState("daily");
+  const [trendingLanguage, setTrendingLanguage] = useState("");
+  const [trendingSpokenLanguage, setTrendingSpokenLanguage] = useState("");
+  const [trendingLoading, setTrendingLoading] = useState(false);
+  const [trendingError, setTrendingError] = useState("");
+  const [importingTrending, setImportingTrending] = useState<string | null>(null);
+
+  // Favorites
+  const [favorites, setFavorites] = useState<FavoriteRepo[]>([]);
+  const [favoritesError, setFavoritesError] = useState("");
+  const [exporting, setExporting] = useState(false);
+
   // Load recent repos and settings on mount
   useEffect(() => {
     loadRecentRepos();
     loadSettings();
+    loadFavorites();
   }, []);
+
+  useEffect(() => {
+    if (homeTab === "trending" && trendingItems.length === 0 && !trendingLoading) {
+      loadTrending();
+    }
+  }, [homeTab]);
 
   const loadRecentRepos = async () => {
     try {
@@ -210,6 +365,33 @@ function App() {
       setSettings(s);
     } catch (err) {
       console.error("Failed to load settings:", err);
+    }
+  };
+
+  const loadFavorites = async () => {
+    try {
+      const items = await getFavorites();
+      setFavorites(items);
+    } catch (err) {
+      console.error("Failed to load favorites:", err);
+    }
+  };
+
+  const loadTrending = async () => {
+    setTrendingLoading(true);
+    setTrendingError("");
+
+    try {
+      const items = await getTrendingRepos(
+        trendingLanguage.trim() ? trendingLanguage.trim() : null,
+        trendingSince,
+        trendingSpokenLanguage.trim() ? trendingSpokenLanguage.trim() : null
+      );
+      setTrendingItems(items);
+    } catch (err) {
+      setTrendingError(String(err));
+    } finally {
+      setTrendingLoading(false);
     }
   };
 
@@ -263,6 +445,43 @@ function App() {
       setError(String(err));
     } finally {
       setImportingRepo(null);
+    }
+  };
+
+  const handleTrendingImport = async (item: TrendingRepo) => {
+    setImportingTrending(item.full_name);
+    setTrendingError("");
+
+    try {
+      const result = await importRepoFromGithub(item.url);
+      setCurrentRepo(result.info);
+      setTree(result.tree);
+      setView("repo");
+      setSelectedPath("");
+      setFileContent(null);
+      setInput("");
+      await loadRecentRepos();
+    } catch (err) {
+      setTrendingError(String(err));
+    } finally {
+      setImportingTrending(null);
+    }
+  };
+
+  const handleFavoriteOpen = async (item: FavoriteRepo) => {
+    setFavoritesError("");
+
+    try {
+      const result = await importRepoFromGithub(item.url);
+      setCurrentRepo(result.info);
+      setTree(result.tree);
+      setView("repo");
+      setSelectedPath("");
+      setFileContent(null);
+      setInput("");
+      await loadRecentRepos();
+    } catch (err) {
+      setFavoritesError(String(err));
     }
   };
 
@@ -331,6 +550,75 @@ function App() {
     setSettings(newSettings);
   };
 
+  const handleAddFavorite = async (item: TrendingRepo) => {
+    setFavoritesError("");
+    const exists = favorites.some(
+      (fav) => fav.owner === item.owner && fav.repo === item.repo
+    );
+    if (exists) return;
+
+    const next: FavoriteRepo[] = [
+      {
+        owner: item.owner,
+        repo: item.repo,
+        url: item.url,
+        description: item.description ?? null,
+        language: item.language ?? null,
+        stars: typeof item.stars === "number" ? item.stars : null,
+        added_at: new Date().toISOString(),
+      },
+      ...favorites,
+    ];
+
+    try {
+      await saveFavorites(next);
+      setFavorites(next);
+    } catch (err) {
+      setFavoritesError(String(err));
+    }
+  };
+
+  const handleRemoveFavorite = async (item: FavoriteRepo) => {
+    setFavoritesError("");
+    const next = favorites.filter(
+      (fav) => !(fav.owner === item.owner && fav.repo === item.repo)
+    );
+    try {
+      await saveFavorites(next);
+      setFavorites(next);
+    } catch (err) {
+      setFavoritesError(String(err));
+    }
+  };
+
+  const handleExportFavorites = async (format: "json" | "markdown") => {
+    if (exporting) return;
+    setFavoritesError("");
+    setExporting(true);
+
+    try {
+      const timestamp = formatExportTimestamp(new Date());
+      const extension = format === "json" ? "json" : "md";
+      const defaultPath = `repoview-favorites-${timestamp}.${extension}`;
+      const path = await save({
+        defaultPath,
+        filters: [
+          {
+            name: format === "json" ? "JSON" : "Markdown",
+            extensions: [extension],
+          },
+        ],
+      });
+
+      if (!path) return;
+      await exportFavorites(format, path);
+    } catch (err) {
+      setFavoritesError(String(err));
+    } finally {
+      setExporting(false);
+    }
+  };
+
   // Settings view
   if (view === "settings") {
     return (
@@ -350,6 +638,163 @@ function App() {
       ? "Press Enter to search GitHub"
       : "";
 
+    const renderHomeContent = () => {
+      if (homeTab === "home") {
+        return (
+          <>
+            {/* Unified Input */}
+            <div className="input-section">
+              <form className="unified-form" onSubmit={handleSubmit}>
+                <input
+                  type="text"
+                  className="unified-input"
+                  placeholder="Search repos or paste GitHub URL (e.g. facebook/react)"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  disabled={isLoading}
+                  spellCheck={false}
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                />
+                <button
+                  type="submit"
+                  className="unified-submit"
+                  disabled={isLoading || !input.trim()}
+                >
+                  {isLoading ? (
+                    <>
+                      <span className="spinner small"></span>
+                      {isGitHubUrl(input) ? "Importing..." : "Searching..."}
+                    </>
+                  ) : (
+                    "Go"
+                  )}
+                </button>
+              </form>
+              {inputHint && <p className="input-hint">{inputHint}</p>}
+              {error && <p className="input-error">{error}</p>}
+            </div>
+
+            {/* Search Results */}
+            <SearchResults
+              results={searchResults}
+              onImport={handleSearchImport}
+              importingRepo={importingRepo}
+            />
+
+            {/* Recent Repos */}
+            <RepoList
+              repos={recentRepos}
+              onSelect={handleRepoSelect}
+              onDelete={handleRepoDelete}
+            />
+          </>
+        );
+      }
+
+      if (homeTab === "trending") {
+        return (
+          <div className="trending-view">
+            <div className="trending-header">
+              <div>
+                <h3>GitHub Trending</h3>
+                <p>Explore what’s popular and open repositories instantly.</p>
+              </div>
+              <span className="trending-badge">{trendingSince}</span>
+            </div>
+            <div className="trending-controls">
+              <div className="trending-field">
+                <label>Timeframe</label>
+                <select
+                  value={trendingSince}
+                  onChange={(e) => setTrendingSince(e.target.value)}
+                >
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </div>
+              <div className="trending-field">
+                <label>Language</label>
+                <input
+                  type="text"
+                  placeholder="e.g. TypeScript"
+                  value={trendingLanguage}
+                  onChange={(e) => setTrendingLanguage(e.target.value)}
+                />
+              </div>
+              <div className="trending-field">
+                <label>Spoken Language</label>
+                <input
+                  type="text"
+                  placeholder="e.g. en, zh"
+                  value={trendingSpokenLanguage}
+                  onChange={(e) => setTrendingSpokenLanguage(e.target.value)}
+                />
+              </div>
+              <button
+                className="trending-refresh"
+                onClick={loadTrending}
+                disabled={trendingLoading}
+              >
+                {trendingLoading ? "Loading..." : "Refresh"}
+              </button>
+            </div>
+            {trendingError && <p className="input-error">{trendingError}</p>}
+            {trendingLoading ? (
+              <p className="loading-state">Loading trending repositories...</p>
+            ) : (
+              <TrendingList
+                items={trendingItems}
+                onImport={handleTrendingImport}
+                onFavorite={handleAddFavorite}
+                importingRepo={importingTrending}
+              />
+            )}
+          </div>
+        );
+      }
+
+      const hasFavorites = favorites.length > 0;
+
+      return (
+        <div className="favorites-view">
+          <div className="favorites-actions">
+            <div className="favorites-actions-info">
+              <h3>Exports</h3>
+              <p>
+                {hasFavorites
+                  ? "Download your favorites as JSON or Markdown."
+                  : "Add favorites from Trending to enable exports."}
+              </p>
+            </div>
+            <div className="favorites-actions-buttons">
+              <button
+                className="favorites-export"
+                onClick={() => handleExportFavorites("json")}
+                disabled={exporting || !hasFavorites}
+              >
+                Export JSON
+              </button>
+              <button
+                className="favorites-export ghost"
+                onClick={() => handleExportFavorites("markdown")}
+                disabled={exporting || !hasFavorites}
+              >
+                Export Markdown
+              </button>
+            </div>
+          </div>
+          {favoritesError && <p className="input-error">{favoritesError}</p>}
+          <FavoritesList
+            items={favorites}
+            onOpen={handleFavoriteOpen}
+            onRemove={handleRemoveFavorite}
+          />
+        </div>
+      );
+    };
+
     return (
       <div className="app home-view">
         <header className="app-header">
@@ -368,52 +813,28 @@ function App() {
         </header>
 
         <main className="home-content">
-          {/* Unified Input */}
-          <div className="input-section">
-            <form className="unified-form" onSubmit={handleSubmit}>
-              <input
-                type="text"
-                className="unified-input"
-                placeholder="Search repos or paste GitHub URL (e.g. facebook/react)"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                disabled={isLoading}
-                spellCheck={false}
-                autoCorrect="off"
-                autoCapitalize="off"
-              />
-              <button
-                type="submit"
-                className="unified-submit"
-                disabled={isLoading || !input.trim()}
-              >
-                {isLoading ? (
-                  <>
-                    <span className="spinner small"></span>
-                    {isGitHubUrl(input) ? "Importing..." : "Searching..."}
-                  </>
-                ) : (
-                  "Go"
-                )}
-              </button>
-            </form>
-            {inputHint && <p className="input-hint">{inputHint}</p>}
-            {error && <p className="input-error">{error}</p>}
+          <div className="home-tabs">
+            <button
+              className={`home-tab ${homeTab === "home" ? "active" : ""}`}
+              onClick={() => setHomeTab("home")}
+            >
+              Home
+            </button>
+            <button
+              className={`home-tab ${homeTab === "trending" ? "active" : ""}`}
+              onClick={() => setHomeTab("trending")}
+            >
+              Trending
+            </button>
+            <button
+              className={`home-tab ${homeTab === "favorites" ? "active" : ""}`}
+              onClick={() => setHomeTab("favorites")}
+            >
+              Favorites
+            </button>
           </div>
 
-          {/* Search Results */}
-          <SearchResults
-            results={searchResults}
-            onImport={handleSearchImport}
-            importingRepo={importingRepo}
-          />
-
-          {/* Recent Repos */}
-          <RepoList
-            repos={recentRepos}
-            onSelect={handleRepoSelect}
-            onDelete={handleRepoDelete}
-          />
+          {renderHomeContent()}
         </main>
       </div>
     );

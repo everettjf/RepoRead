@@ -4,9 +4,12 @@ use repo::{
     build_file_tree, delete_repo as delete_repo_impl, detect_language, download_repo_zip,
     extract_zip, generate_repo_key, get_default_branch, get_repos_dir, list_repos as list_repos_impl,
     load_repo_info, load_tree, parse_github_url, read_file_content, save_repo_info, save_tree,
-    search_github_repos as search_repos_impl,
+    search_github_repos as search_repos_impl, fetch_trending_repos as fetch_trending_repos_impl,
     load_settings as load_settings_impl, save_settings as save_settings_impl,
+    load_favorites as load_favorites_impl, save_favorites as save_favorites_impl,
+    export_favorites as export_favorites_impl,
     FileContent, FileNode, ImportResult, RepoError, RepoInfo, SearchResultItem, AppSettings,
+    TrendingRepo, FavoriteRepo,
 };
 
 #[tauri::command]
@@ -100,6 +103,15 @@ async fn search_github_repos(query: String, token: Option<String>) -> Result<Vec
 }
 
 #[tauri::command]
+async fn get_trending_repos(
+    language: Option<String>,
+    since: String,
+    spoken_language: Option<String>,
+) -> Result<Vec<TrendingRepo>, RepoError> {
+    fetch_trending_repos_impl(language.as_deref(), &since, spoken_language.as_deref()).await
+}
+
+#[tauri::command]
 fn get_settings() -> AppSettings {
     load_settings_impl()
 }
@@ -109,10 +121,26 @@ fn update_settings(settings: AppSettings) -> Result<(), RepoError> {
     save_settings_impl(&settings)
 }
 
+#[tauri::command]
+fn get_favorites() -> Vec<FavoriteRepo> {
+    load_favorites_impl()
+}
+
+#[tauri::command]
+fn save_favorites(favorites: Vec<FavoriteRepo>) -> Result<(), RepoError> {
+    save_favorites_impl(&favorites)
+}
+
+#[tauri::command]
+fn export_favorites(format: String, path: String) -> Result<(), RepoError> {
+    export_favorites_impl(std::path::Path::new(&path), &format)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             import_repo_from_github,
             read_text_file,
@@ -122,9 +150,13 @@ pub fn run() {
             delete_repo,
             get_file_language,
             search_github_repos,
+            get_trending_repos,
             get_settings,
             update_settings,
             get_repo_path,
+            get_favorites,
+            save_favorites,
+            export_favorites,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

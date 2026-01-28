@@ -1,5 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { FileNode, RepoInfo, ImportResult, FileContent, SearchResultItem, AppSettings } from "./types";
+import type {
+  FileNode,
+  RepoInfo,
+  ImportResult,
+  FileContent,
+  SearchResultItem,
+  AppSettings,
+  TrendingRepo,
+  FavoriteRepo,
+} from "./types";
 
 export async function importRepoFromGithub(url: string): Promise<ImportResult> {
   return invoke<ImportResult>("import_repo_from_github", { url });
@@ -43,4 +52,28 @@ export async function updateSettings(settings: AppSettings): Promise<void> {
 
 export async function getRepoPath(repoKey: string): Promise<string> {
   return invoke<string>("get_repo_path", { repoKey });
+}
+
+export async function getTrendingRepos(
+  language: string | null,
+  since: string,
+  spokenLanguage: string | null
+): Promise<TrendingRepo[]> {
+  return invoke<TrendingRepo[]>("get_trending_repos", {
+    language,
+    since,
+    spokenLanguage,
+  });
+}
+
+export async function getFavorites(): Promise<FavoriteRepo[]> {
+  return invoke<FavoriteRepo[]>("get_favorites");
+}
+
+export async function saveFavorites(favorites: FavoriteRepo[]): Promise<void> {
+  return invoke<void>("save_favorites", { favorites });
+}
+
+export async function exportFavorites(format: "json" | "markdown", path: string): Promise<void> {
+  return invoke<void>("export_favorites", { format, path });
 }

@@ -581,6 +581,9 @@ body {
 .markdown-preview img {
   max-width: 100%;
   height: auto;
+  border-radius: 6px;
+  margin: 16px 0;
+  display: block;
 }
 
 /* Binary File View */

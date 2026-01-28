@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "repoview",
+  "productName": "RepoView",
   "version": "0.1.0",
   "identifier": "com.xnu.repoview",
   "build": {
@@ -12,9 +12,11 @@
   "app": {
     "windows": [
       {
-        "title": "repoview",
-        "width": 800,
-        "height": 600
+        "title": "RepoView",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600
       }
     ],
     "security": {
@@ -30,6 +32,8 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "category": "DeveloperTool",
+    "shortDescription": "Read GitHub repositories on iPad"
   }
 }

@@ -1,0 +1,430 @@
+use serde::{Deserialize, Serialize};
+use std::fs::{self, File};
+use std::io::{self, Read, Write};
+use std::path::{Path, PathBuf};
+use thiserror::Error;
+
+const MAX_FILE_SIZE: u64 = 3 * 1024 * 1024; // 3MB
+const MAX_LINES: usize = 50_000;
+const PREVIEW_LINES: usize = 1000;
+
+#[derive(Error, Debug)]
+pub enum RepoError {
+    #[error("Invalid GitHub URL: {0}")]
+    InvalidUrl(String),
+    #[error("HTTP request failed: {0}")]
+    HttpError(#[from] reqwest::Error),
+    #[error("IO error: {0}")]
+    IoError(#[from] io::Error),
+    #[error("ZIP extraction failed: {0}")]
+    ZipError(#[from] zip::result::ZipError),
+    #[error("JSON error: {0}")]
+    JsonError(#[from] serde_json::Error),
+    #[error("Repository not found: {0}")]
+    RepoNotFound(String),
+}
+
+impl Serialize for RepoError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParsedGitHubUrl {
+    pub owner: String,
+    pub repo: String,
+    pub branch: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RepoInfo {
+    pub key: String,
+    pub owner: String,
+    pub repo: String,
+    pub branch: String,
+    pub imported_at: String,
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileNode {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub children: Option<Vec<FileNode>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportResult {
+    pub repo_key: String,
+    pub info: RepoInfo,
+    pub tree: FileNode,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileContent {
+    pub content: String,
+    pub truncated: bool,
+    pub total_lines: Option<usize>,
+    pub language: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GitHubRepoResponse {
+    default_branch: String,
+}
+
+pub fn parse_github_url(url: &str) -> Result<ParsedGitHubUrl, RepoError> {
+    let url = url.trim().trim_end_matches('/');
+
+    // Remove protocol
+    let path = url
+        .strip_prefix("https://github.com/")
+        .or_else(|| url.strip_prefix("http://github.com/"))
+        .or_else(|| url.strip_prefix("github.com/"))
+        .ok_or_else(|| RepoError::InvalidUrl("Not a GitHub URL".into()))?;
+
+    let parts: Vec<&str> = path.split('/').collect();
+
+    if parts.len() < 2 {
+        return Err(RepoError::InvalidUrl("Missing owner or repo".into()));
+    }
+
+    let owner = parts[0].to_string();
+    let repo = parts[1].to_string();
+
+    // Check for /tree/<branch> pattern
+    let branch = if parts.len() >= 4 && parts[2] == "tree" {
+        Some(parts[3..].join("/"))
+    } else {
+        None
+    };
+
+    Ok(ParsedGitHubUrl { owner, repo, branch })
+}
+
+pub async fn get_default_branch(owner: &str, repo: &str) -> Result<String, RepoError> {
+    let client = reqwest::Client::new();
+    let url = format!("https://api.github.com/repos/{}/{}", owner, repo);
+
+    let response = client
+        .get(&url)
+        .header("User-Agent", "RepoView/0.1")
+        .header("Accept", "application/vnd.github.v3+json")
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        // Fallback to "main" if API fails
+        return Ok("main".to_string());
+    }
+
+    let repo_info: GitHubRepoResponse = response.json().await?;
+    Ok(repo_info.default_branch)
+}
+
+pub async fn download_repo_zip(
+    owner: &str,
+    repo: &str,
+    branch: &str,
+    dest_path: &Path,
+) -> Result<(), RepoError> {
+    let zip_url = format!(
+        "https://codeload.github.com/{}/{}/zip/refs/heads/{}",
+        owner, repo, branch
+    );
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get(&zip_url)
+        .header("User-Agent", "RepoView/0.1")
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        return Err(RepoError::InvalidUrl(format!(
+            "Failed to download: HTTP {}",
+            response.status()
+        )));
+    }
+
+    let bytes = response.bytes().await?;
+
+    // Create parent directory
+    if let Some(parent) = dest_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let mut file = File::create(dest_path)?;
+    file.write_all(&bytes)?;
+
+    Ok(())
+}
+
+pub fn extract_zip(zip_path: &Path, dest_dir: &Path) -> Result<String, RepoError> {
+    let file = File::open(zip_path)?;
+    let mut archive = zip::ZipArchive::new(file)?;
+
+    // Get root folder name (GitHub adds repo-branch prefix)
+    let root_name = archive
+        .by_index(0)?
+        .name()
+        .split('/')
+        .next()
+        .unwrap_or("")
+        .to_string();
+
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i)?;
+        let name = file.name().to_string();
+
+        // Skip the root folder prefix
+        let relative_path = name
+            .strip_prefix(&format!("{}/", root_name))
+            .unwrap_or(&name);
+
+        if relative_path.is_empty() {
+            continue;
+        }
+
+        let out_path = dest_dir.join(relative_path);
+
+        if file.is_dir() {
+            fs::create_dir_all(&out_path)?;
+        } else {
+            if let Some(parent) = out_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            let mut outfile = File::create(&out_path)?;
+            io::copy(&mut file, &mut outfile)?;
+        }
+    }
+
+    // Remove ZIP file after extraction
+    fs::remove_file(zip_path)?;
+
+    Ok(root_name)
+}
+
+pub fn build_file_tree(root_path: &Path, base_name: &str) -> Result<FileNode, RepoError> {
+    fn build_node(path: &Path, root: &Path) -> Option<FileNode> {
+        let name = path.file_name()?.to_string_lossy().to_string();
+
+        // Skip hidden files and common unneeded dirs
+        if name.starts_with('.') || name == "node_modules" || name == "__pycache__" || name == "_meta" {
+            return None;
+        }
+
+        let relative_path = path.strip_prefix(root).ok()?.to_string_lossy().to_string();
+
+        if path.is_dir() {
+            let mut children: Vec<FileNode> = fs::read_dir(path)
+                .ok()?
+                .filter_map(|e| e.ok())
+                .filter_map(|e| build_node(&e.path(), root))
+                .collect();
+
+            // Sort: directories first, then by name
+            children.sort_by(|a, b| {
+                match (a.is_dir, b.is_dir) {
+                    (true, false) => std::cmp::Ordering::Less,
+                    (false, true) => std::cmp::Ordering::Greater,
+                    _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+                }
+            });
+
+            Some(FileNode {
+                name,
+                path: relative_path,
+                is_dir: true,
+                size: None,
+                children: Some(children),
+            })
+        } else {
+            let size = fs::metadata(path).ok()?.len();
+            Some(FileNode {
+                name,
+                path: relative_path,
+                is_dir: false,
+                size: Some(size),
+                children: None,
+            })
+        }
+    }
+
+    build_node(root_path, root_path)
+        .map(|mut node| {
+            node.name = base_name.to_string();
+            node.path = "".to_string();
+            node
+        })
+        .ok_or_else(|| RepoError::IoError(io::Error::new(io::ErrorKind::NotFound, "Root not found")))
+}
+
+pub fn detect_language(file_path: &str) -> String {
+    let ext = Path::new(file_path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
+
+    match ext.to_lowercase().as_str() {
+        "js" | "mjs" | "cjs" => "javascript",
+        "jsx" => "javascript",
+        "ts" | "mts" | "cts" => "typescript",
+        "tsx" => "typescript",
+        "py" | "pyw" => "python",
+        "json" => "json",
+        "md" | "markdown" => "markdown",
+        "html" | "htm" => "html",
+        "css" => "css",
+        "scss" | "sass" => "scss",
+        "yaml" | "yml" => "yaml",
+        "toml" => "toml",
+        "rs" => "rust",
+        "go" => "go",
+        "java" => "java",
+        "c" | "h" => "c",
+        "cpp" | "cc" | "cxx" | "hpp" => "cpp",
+        "sh" | "bash" | "zsh" => "shell",
+        "sql" => "sql",
+        "xml" => "xml",
+        "swift" => "swift",
+        _ => "plaintext",
+    }.to_string()
+}
+
+pub fn read_file_content(file_path: &Path) -> Result<FileContent, RepoError> {
+    let metadata = fs::metadata(file_path)?;
+    let file_size = metadata.len();
+    let language = detect_language(&file_path.to_string_lossy());
+
+    // Check file size
+    if file_size > MAX_FILE_SIZE {
+        // Read only first portion
+        let mut file = File::open(file_path)?;
+        let mut buffer = vec![0u8; (MAX_FILE_SIZE / 2) as usize];
+        let bytes_read = file.read(&mut buffer)?;
+        buffer.truncate(bytes_read);
+
+        let content = String::from_utf8_lossy(&buffer);
+        let lines: Vec<&str> = content.lines().take(PREVIEW_LINES).collect();
+
+        return Ok(FileContent {
+            content: lines.join("\n"),
+            truncated: true,
+            total_lines: None,
+            language,
+        });
+    }
+
+    let content = fs::read_to_string(file_path)?;
+    let line_count = content.lines().count();
+
+    if line_count > MAX_LINES {
+        let lines: Vec<&str> = content.lines().take(PREVIEW_LINES).collect();
+        Ok(FileContent {
+            content: lines.join("\n"),
+            truncated: true,
+            total_lines: Some(line_count),
+            language,
+        })
+    } else {
+        Ok(FileContent {
+            content,
+            truncated: false,
+            total_lines: Some(line_count),
+            language,
+        })
+    }
+}
+
+pub fn get_repos_dir() -> PathBuf {
+    directories::ProjectDirs::from("com", "xnu", "RepoView")
+        .map(|dirs| dirs.data_dir().to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("./repos"))
+        .join("repos")
+}
+
+pub fn generate_repo_key(owner: &str, repo: &str) -> String {
+    format!("{}_{}", owner, repo)
+}
+
+pub fn save_repo_info(repo_dir: &Path, info: &RepoInfo) -> Result<(), RepoError> {
+    let meta_dir = repo_dir.join("_meta");
+    fs::create_dir_all(&meta_dir)?;
+
+    let info_path = meta_dir.join("info.json");
+    let json = serde_json::to_string_pretty(info)?;
+    fs::write(info_path, json)?;
+
+    Ok(())
+}
+
+pub fn save_tree(repo_dir: &Path, tree: &FileNode) -> Result<(), RepoError> {
+    let meta_dir = repo_dir.join("_meta");
+    fs::create_dir_all(&meta_dir)?;
+
+    let tree_path = meta_dir.join("tree.json");
+    let json = serde_json::to_string_pretty(tree)?;
+    fs::write(tree_path, json)?;
+
+    Ok(())
+}
+
+pub fn load_repo_info(repo_dir: &Path) -> Result<RepoInfo, RepoError> {
+    let info_path = repo_dir.join("_meta").join("info.json");
+    let json = fs::read_to_string(&info_path)?;
+    let info: RepoInfo = serde_json::from_str(&json)?;
+    Ok(info)
+}
+
+pub fn load_tree(repo_dir: &Path) -> Result<FileNode, RepoError> {
+    let tree_path = repo_dir.join("_meta").join("tree.json");
+    let json = fs::read_to_string(&tree_path)?;
+    let tree: FileNode = serde_json::from_str(&json)?;
+    Ok(tree)
+}
+
+pub fn list_repos() -> Result<Vec<RepoInfo>, RepoError> {
+    let repos_dir = get_repos_dir();
+
+    if !repos_dir.exists() {
+        return Ok(vec![]);
+    }
+
+    let mut repos = vec![];
+
+    for entry in fs::read_dir(&repos_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if path.is_dir() {
+            if let Ok(info) = load_repo_info(&path) {
+                repos.push(info);
+            }
+        }
+    }
+
+    // Sort by imported_at descending
+    repos.sort_by(|a, b| b.imported_at.cmp(&a.imported_at));
+
+    Ok(repos)
+}
+
+pub fn delete_repo(repo_key: &str) -> Result<(), RepoError> {
+    let repo_dir = get_repos_dir().join(repo_key);
+
+    if !repo_dir.exists() {
+        return Err(RepoError::RepoNotFound(repo_key.to_string()));
+    }
+
+    fs::remove_dir_all(&repo_dir)?;
+    Ok(())
+}

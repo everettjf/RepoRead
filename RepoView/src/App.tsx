@@ -1,50 +1,178 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
+import { useState, useEffect, useCallback } from "react";
+import { FileTree } from "./components/FileTree";
+import { CodeViewer } from "./components/CodeViewer";
+import { RepoList } from "./components/RepoList";
+import { UrlInput } from "./components/UrlInput";
+import {
+  importRepoFromGithub,
+  readTextFile,
+  listRecentRepos,
+  getRepoTree,
+  deleteRepo,
+} from "./api";
+import type { FileNode, RepoInfo, FileContent } from "./types";
 import "./App.css";
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+type View = "home" | "repo";
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
+function App() {
+  const [view, setView] = useState<View>("home");
+  const [recentRepos, setRecentRepos] = useState<RepoInfo[]>([]);
+  const [currentRepo, setCurrentRepo] = useState<RepoInfo | null>(null);
+  const [tree, setTree] = useState<FileNode | null>(null);
+  const [selectedPath, setSelectedPath] = useState<string>("");
+  const [fileContent, setFileContent] = useState<FileContent | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [isLoadingFile, setIsLoadingFile] = useState(false);
+  const [error, setError] = useState<string>("");
+
+  // Load recent repos on mount
+  useEffect(() => {
+    loadRecentRepos();
+  }, []);
+
+  const loadRecentRepos = async () => {
+    try {
+      const repos = await listRecentRepos();
+      setRecentRepos(repos);
+    } catch (err) {
+      console.error("Failed to load recent repos:", err);
+    }
+  };
+
+  const handleImport = async (url: string) => {
+    setIsImporting(true);
+    setError("");
+
+    try {
+      const result = await importRepoFromGithub(url);
+      setCurrentRepo(result.info);
+      setTree(result.tree);
+      setView("repo");
+      setSelectedPath("");
+      setFileContent(null);
+      await loadRecentRepos();
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleRepoSelect = async (repo: RepoInfo) => {
+    try {
+      const repoTree = await getRepoTree(repo.key);
+      setCurrentRepo(repo);
+      setTree(repoTree);
+      setView("repo");
+      setSelectedPath("");
+      setFileContent(null);
+    } catch (err) {
+      setError(String(err));
+    }
+  };
+
+  const handleRepoDelete = async (repoKey: string) => {
+    if (!confirm("Delete this repository?")) return;
+
+    try {
+      await deleteRepo(repoKey);
+      await loadRecentRepos();
+
+      if (currentRepo?.key === repoKey) {
+        setView("home");
+        setCurrentRepo(null);
+        setTree(null);
+        setFileContent(null);
+      }
+    } catch (err) {
+      setError(String(err));
+    }
+  };
+
+  const handleFileSelect = useCallback(
+    async (path: string) => {
+      if (!currentRepo || !path) return;
+
+      setSelectedPath(path);
+      setIsLoadingFile(true);
+
+      try {
+        const content = await readTextFile(currentRepo.key, path);
+        setFileContent(content);
+      } catch (err) {
+        setError(String(err));
+        setFileContent(null);
+      } finally {
+        setIsLoadingFile(false);
+      }
+    },
+    [currentRepo]
+  );
+
+  const handleBack = () => {
+    setView("home");
+    setCurrentRepo(null);
+    setTree(null);
+    setFileContent(null);
+    setSelectedPath("");
+    setError("");
+  };
+
+  if (view === "home") {
+    return (
+      <div className="app home-view">
+        <header className="app-header">
+          <h1>RepoView</h1>
+          <p className="tagline">Read GitHub repositories. No clone. No setup. Just code.</p>
+        </header>
+
+        <main className="home-content">
+          <UrlInput onSubmit={handleImport} isLoading={isImporting} error={error} />
+          <RepoList
+            repos={recentRepos}
+            onSelect={handleRepoSelect}
+            onDelete={handleRepoDelete}
+          />
+        </main>
+      </div>
+    );
   }
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+    <div className="app repo-view">
+      <header className="repo-header">
+        <button className="back-button" onClick={handleBack}>
+          ← Back
+        </button>
+        <div className="repo-title">
+          <span className="repo-name">
+            {currentRepo?.owner}/{currentRepo?.repo}
+          </span>
+          <span className="repo-branch">{currentRepo?.branch}</span>
+        </div>
+      </header>
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+      <div className="repo-content">
+        <aside className="sidebar">
+          {tree && (
+            <FileTree
+              tree={tree}
+              onFileSelect={handleFileSelect}
+              selectedPath={selectedPath}
+            />
+          )}
+        </aside>
+
+        <main className="main-content">
+          <CodeViewer
+            content={fileContent}
+            filePath={selectedPath}
+            isLoading={isLoadingFile}
+          />
+        </main>
       </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+    </div>
   );
 }
 

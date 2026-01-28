@@ -1,12 +1,12 @@
 [package]
-name = "repoview"
+name = "reporead"
 version = "0.1.0"
 description = "Read GitHub repositories on iPad. No clone. No setup. Just code."
 authors = ["you"]
 edition = "2021"
 
 [lib]
-name = "repoview_lib"
+name = "reporead_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

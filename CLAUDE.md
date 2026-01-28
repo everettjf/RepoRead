@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-RepoView is a Tauri desktop application for browsing GitHub repositories without cloning. Built for iPad/tablet use with the tagline: "Read GitHub repositories. No clone. No setup. Just code."
+RepoRead is a Tauri desktop application for browsing GitHub repositories without cloning. Built for iPad/tablet use with the tagline: "Read GitHub repositories. No clone. No setup. Just code."
 
 ## Development Commands
 
@@ -61,9 +61,9 @@ Defined in `lib.rs`, called from `api.ts`:
 ## Data Storage
 
 Repos cached at OS-specific data directory:
-- macOS: `~/Library/Application Support/com.xnu.RepoView/repos/`
-- Linux: `~/.local/share/RepoView/data/repos/`
-- Windows: `%APPDATA%/RepoView/data/repos/`
+- macOS: `~/Library/Application Support/com.xnu.RepoRead/repos/`
+- Linux: `~/.local/share/RepoRead/data/repos/`
+- Windows: `%APPDATA%/RepoRead/data/repos/`
 
 Per-repo structure:
 ```

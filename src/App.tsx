@@ -104,10 +104,10 @@ function SearchResults({
               {importingRepo === item.full_name ? (
                 <>
                   <span className="spinner small"></span>
-                  Importing...
+                  Opening...
                 </>
               ) : (
-                "Import"
+                "Open"
               )}
             </button>
           </div>
@@ -200,7 +200,7 @@ function FavoritesList({
       <div className="empty-state favorites-empty">
         <div className="empty-icon">⭐</div>
         <h3>No favorites yet</h3>
-        <p>Save repositories from Trending to keep them here.</p>
+        <p>Star repositories from Trending to keep them here.</p>
       </div>
     );
   }
@@ -269,7 +269,7 @@ function SettingsPage({
   };
 
   const handleOpenGitHub = async () => {
-    await openUrl("https://github.com/settings/tokens/new?description=RepoView&scopes=public_repo");
+    await openUrl("https://github.com/settings/tokens/new?description=RepoRead&scopes=public_repo");
   };
 
   const hasFavorites = favoritesCount > 0;
@@ -685,7 +685,7 @@ function App() {
     try {
       const timestamp = formatExportTimestamp(new Date());
       const extension = format === "json" ? "json" : "md";
-      const defaultPath = `repoview-favorites-${timestamp}.${extension}`;
+      const defaultPath = `reporead-favorites-${timestamp}.${extension}`;
       const path = await save({
         defaultPath,
         filters: [
@@ -900,7 +900,7 @@ function App() {
           </button>
           <div className="header-content">
             <span className="app-logo">📖</span>
-            <h1>RepoView</h1>
+            <h1>RepoRead</h1>
           </div>
           <p className="tagline">Read GitHub repositories. No clone. No setup. Just code.</p>
         </header>

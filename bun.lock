@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "repoview",
+      "name": "reporead",
       "dependencies": {
         "@monaco-editor/react": "^4.7.0",
         "@radix-ui/react-select": "^2.2.6",

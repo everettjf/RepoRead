@@ -139,7 +139,7 @@ pub async fn search_github_repos(query: &str, token: Option<&str>) -> Result<Vec
 
     let mut request = client
         .get(&url)
-        .header("User-Agent", "RepoView/0.1")
+        .header("User-Agent", "RepoRead/0.1")
         .header("Accept", "application/vnd.github.v3+json");
 
     // Add token if provided
@@ -226,7 +226,7 @@ pub async fn fetch_trending_repos(
     let client = reqwest::Client::new();
     let response = client
         .get(&url)
-        .header("User-Agent", "RepoView/0.1")
+        .header("User-Agent", "RepoRead/0.1")
         .header("Accept", "text/html")
         .send()
         .await?;
@@ -317,7 +317,7 @@ pub async fn fetch_trending_repos(
 
 // Settings management
 fn get_settings_path() -> PathBuf {
-    directories::ProjectDirs::from("com", "xnu", "RepoView")
+    directories::ProjectDirs::from("com", "xnu", "RepoRead")
         .map(|dirs| dirs.config_dir().to_path_buf())
         .unwrap_or_else(|| PathBuf::from("./config"))
         .join("settings.json")
@@ -348,7 +348,7 @@ pub fn save_settings(settings: &AppSettings) -> Result<(), RepoError> {
 }
 
 fn get_favorites_path() -> PathBuf {
-    directories::ProjectDirs::from("com", "xnu", "RepoView")
+    directories::ProjectDirs::from("com", "xnu", "RepoRead")
         .map(|dirs| dirs.config_dir().to_path_buf())
         .unwrap_or_else(|| PathBuf::from("./config"))
         .join("favorites.json")
@@ -397,7 +397,7 @@ pub fn export_favorites(path: &Path, format: &str) -> Result<(), RepoError> {
         }
         "markdown" => {
             let mut out = String::new();
-            out.push_str("# RepoView Favorites\n\n");
+            out.push_str("# RepoRead Favorites\n\n");
             for fav in favorites {
                 let desc = fav
                     .description
@@ -465,7 +465,7 @@ pub async fn get_default_branch(owner: &str, repo: &str) -> Result<String, RepoE
 
     let response = client
         .get(&url)
-        .header("User-Agent", "RepoView/0.1")
+        .header("User-Agent", "RepoRead/0.1")
         .header("Accept", "application/vnd.github.v3+json")
         .send()
         .await?;
@@ -493,7 +493,7 @@ pub async fn download_repo_zip(
     let client = reqwest::Client::new();
     let response = client
         .get(&zip_url)
-        .header("User-Agent", "RepoView/0.1")
+        .header("User-Agent", "RepoRead/0.1")
         .send()
         .await?;
 
@@ -767,7 +767,7 @@ pub fn read_file_content(file_path: &Path) -> Result<FileContent, RepoError> {
 }
 
 pub fn get_repos_dir() -> PathBuf {
-    directories::ProjectDirs::from("com", "xnu", "RepoView")
+    directories::ProjectDirs::from("com", "xnu", "RepoRead")
         .map(|dirs| dirs.data_dir().to_path_buf())
         .unwrap_or_else(|| PathBuf::from("./repos"))
         .join("repos")

@@ -37,3 +37,7 @@ export interface SearchResultItem {
   owner: string;
   repo: string;
 }
+
+export interface AppSettings {
+  github_token: string | null;
+}

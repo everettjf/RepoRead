@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { FileTree } from "./components/FileTree";
 import { CodeViewer } from "./components/CodeViewer";
 import { RepoList } from "./components/RepoList";
-import { UrlInput } from "./components/UrlInput";
 import {
   importRepoFromGithub,
   readTextFile,
@@ -10,17 +10,30 @@ import {
   getRepoTree,
   deleteRepo,
   searchGithubRepos,
+  getSettings,
+  updateSettings,
 } from "./api";
-import type { FileNode, RepoInfo, FileContent, SearchResultItem } from "./types";
+import type { FileNode, RepoInfo, FileContent, SearchResultItem, AppSettings } from "./types";
 import "./App.css";
 
-type View = "home" | "repo";
+type View = "home" | "repo" | "settings";
 
 function formatStars(count: number): string {
   if (count >= 1000) {
     return (count / 1000).toFixed(1).replace(/\.0$/, "") + "k";
   }
   return String(count);
+}
+
+// Check if input looks like a GitHub URL
+function isGitHubUrl(input: string): boolean {
+  const trimmed = input.trim().toLowerCase();
+  return (
+    trimmed.startsWith("https://github.com/") ||
+    trimmed.startsWith("http://github.com/") ||
+    trimmed.startsWith("github.com/") ||
+    /^[\w-]+\/[\w.-]+$/.test(trimmed) // owner/repo format
+  );
 }
 
 function SearchResults({
@@ -72,6 +85,91 @@ function SearchResults({
   );
 }
 
+function SettingsPage({
+  settings,
+  onSave,
+  onBack,
+}: {
+  settings: AppSettings;
+  onSave: (settings: AppSettings) => Promise<void>;
+  onBack: () => void;
+}) {
+  const [token, setToken] = useState(settings.github_token || "");
+  const [isSaving, setIsSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await onSave({ github_token: token || null });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleOpenGitHub = async () => {
+    await openUrl("https://github.com/settings/tokens/new?description=RepoView&scopes=public_repo");
+  };
+
+  return (
+    <div className="app settings-view">
+      <header className="settings-header">
+        <button className="back-button" onClick={onBack}>
+          ← Back
+        </button>
+        <h1>Settings</h1>
+      </header>
+
+      <main className="settings-content">
+        <section className="settings-section">
+          <h2>GitHub Token</h2>
+          <p className="settings-desc">
+            Add a personal access token to increase API rate limits.
+          </p>
+          <div className="settings-rate-info">
+            <span className="rate-item">Without token: <strong>10 searches/min</strong></span>
+            <span className="rate-item">With token: <strong>30 searches/min</strong></span>
+          </div>
+
+          <div className="token-input-group">
+            <input
+              type="password"
+              className="token-input"
+              placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+            />
+            <button
+              className="save-button"
+              onClick={handleSave}
+              disabled={isSaving}
+            >
+              {isSaving ? "Saving..." : saved ? "Saved ✓" : "Save"}
+            </button>
+          </div>
+        </section>
+
+        <section className="settings-section">
+          <h2>How to get a GitHub Token</h2>
+          <ol className="token-steps">
+            <li>Click the button below to open GitHub token settings</li>
+            <li>Sign in to GitHub if prompted</li>
+            <li>Set expiration (recommend: 90 days or longer)</li>
+            <li>Under "Select scopes", check <code>public_repo</code></li>
+            <li>Click "Generate token" at the bottom</li>
+            <li>Copy the token and paste it above</li>
+          </ol>
+          <button className="github-link-button" onClick={handleOpenGitHub}>
+            Open GitHub Token Page →
+          </button>
+        </section>
+      </main>
+    </div>
+  );
+}
+
 function App() {
   const [view, setView] = useState<View>("home");
   const [recentRepos, setRecentRepos] = useState<RepoInfo[]>([]);
@@ -79,19 +177,22 @@ function App() {
   const [tree, setTree] = useState<FileNode | null>(null);
   const [selectedPath, setSelectedPath] = useState<string>("");
   const [fileContent, setFileContent] = useState<FileContent | null>(null);
-  const [isImporting, setIsImporting] = useState(false);
   const [isLoadingFile, setIsLoadingFile] = useState(false);
   const [error, setError] = useState<string>("");
 
-  // Search state
-  const [searchQuery, setSearchQuery] = useState("");
+  // Unified input state
+  const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
   const [importingRepo, setImportingRepo] = useState<string | null>(null);
 
-  // Load recent repos on mount
+  // Settings
+  const [settings, setSettings] = useState<AppSettings>({ github_token: null });
+
+  // Load recent repos and settings on mount
   useEffect(() => {
     loadRecentRepos();
+    loadSettings();
   }, []);
 
   const loadRecentRepos = async () => {
@@ -103,21 +204,44 @@ function App() {
     }
   };
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!searchQuery.trim() || isSearching) return;
+  const loadSettings = async () => {
+    try {
+      const s = await getSettings();
+      setSettings(s);
+    } catch (err) {
+      console.error("Failed to load settings:", err);
+    }
+  };
 
-    setIsSearching(true);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || isLoading) return;
+
+    setIsLoading(true);
     setError("");
 
     try {
-      const results = await searchGithubRepos(searchQuery);
-      setSearchResults(results);
+      if (isGitHubUrl(input)) {
+        // Direct import
+        const url = input.includes("github.com") ? input : `https://github.com/${input}`;
+        const result = await importRepoFromGithub(url);
+        setCurrentRepo(result.info);
+        setTree(result.tree);
+        setView("repo");
+        setSelectedPath("");
+        setFileContent(null);
+        setSearchResults([]);
+        setInput("");
+        await loadRecentRepos();
+      } else {
+        // Search
+        const results = await searchGithubRepos(input, settings.github_token);
+        setSearchResults(results);
+      }
     } catch (err) {
       setError(String(err));
-      setSearchResults([]);
     } finally {
-      setIsSearching(false);
+      setIsLoading(false);
     }
   };
 
@@ -133,33 +257,12 @@ function App() {
       setSelectedPath("");
       setFileContent(null);
       setSearchResults([]);
-      setSearchQuery("");
+      setInput("");
       await loadRecentRepos();
     } catch (err) {
       setError(String(err));
     } finally {
       setImportingRepo(null);
-    }
-  };
-
-  const handleImport = async (url: string) => {
-    setIsImporting(true);
-    setError("");
-
-    try {
-      const result = await importRepoFromGithub(url);
-      setCurrentRepo(result.info);
-      setTree(result.tree);
-      setView("repo");
-      setSelectedPath("");
-      setFileContent(null);
-      setSearchResults([]);
-      setSearchQuery("");
-      await loadRecentRepos();
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      setIsImporting(false);
     }
   };
 
@@ -223,41 +326,79 @@ function App() {
     setError("");
   };
 
+  const handleSaveSettings = async (newSettings: AppSettings) => {
+    await updateSettings(newSettings);
+    setSettings(newSettings);
+  };
+
+  // Settings view
+  if (view === "settings") {
+    return (
+      <SettingsPage
+        settings={settings}
+        onSave={handleSaveSettings}
+        onBack={() => setView("home")}
+      />
+    );
+  }
+
+  // Home view
   if (view === "home") {
+    const inputHint = isGitHubUrl(input)
+      ? "Press Enter to import this repository"
+      : input.trim()
+      ? "Press Enter to search GitHub"
+      : "";
+
     return (
       <div className="app home-view">
         <header className="app-header">
-          <h1>RepoView</h1>
+          <button
+            className="settings-button"
+            onClick={() => setView("settings")}
+            title="Settings"
+          >
+            ⚙️
+          </button>
+          <div className="header-content">
+            <span className="app-logo">📖</span>
+            <h1>RepoView</h1>
+          </div>
           <p className="tagline">Read GitHub repositories. No clone. No setup. Just code.</p>
         </header>
 
         <main className="home-content">
-          {/* Search Section */}
-          <div className="search-section">
-            <form className="search-form" onSubmit={handleSearch}>
+          {/* Unified Input */}
+          <div className="input-section">
+            <form className="unified-form" onSubmit={handleSubmit}>
               <input
                 type="text"
-                className="search-input"
-                placeholder="Search GitHub repositories..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                disabled={isSearching}
+                className="unified-input"
+                placeholder="Search repos or paste GitHub URL (e.g. facebook/react)"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                disabled={isLoading}
+                spellCheck={false}
+                autoCorrect="off"
+                autoCapitalize="off"
               />
               <button
                 type="submit"
-                className="search-submit"
-                disabled={isSearching || !searchQuery.trim()}
+                className="unified-submit"
+                disabled={isLoading || !input.trim()}
               >
-                {isSearching ? (
+                {isLoading ? (
                   <>
                     <span className="spinner small"></span>
-                    Searching...
+                    {isGitHubUrl(input) ? "Importing..." : "Searching..."}
                   </>
                 ) : (
-                  "Search"
+                  "Go"
                 )}
               </button>
             </form>
+            {inputHint && <p className="input-hint">{inputHint}</p>}
+            {error && <p className="input-error">{error}</p>}
           </div>
 
           {/* Search Results */}
@@ -266,12 +407,6 @@ function App() {
             onImport={handleSearchImport}
             importingRepo={importingRepo}
           />
-
-          {/* Divider when search results exist */}
-          {searchResults.length > 0 && <div className="section-divider" />}
-
-          {/* URL Input */}
-          <UrlInput onSubmit={handleImport} isLoading={isImporting} error={error} />
 
           {/* Recent Repos */}
           <RepoList
@@ -284,6 +419,7 @@ function App() {
     );
   }
 
+  // Repo view
   return (
     <div className="app repo-view">
       <header className="repo-header">

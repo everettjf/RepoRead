@@ -112,7 +112,7 @@ struct GitHubOwner {
     login: String,
 }
 
-pub async fn search_github_repos(query: &str) -> Result<Vec<SearchResultItem>, RepoError> {
+pub async fn search_github_repos(query: &str, token: Option<&str>) -> Result<Vec<SearchResultItem>, RepoError> {
     if query.trim().is_empty() {
         return Ok(vec![]);
     }
@@ -123,12 +123,19 @@ pub async fn search_github_repos(query: &str) -> Result<Vec<SearchResultItem>, R
         urlencoding::encode(query)
     );
 
-    let response = client
+    let mut request = client
         .get(&url)
         .header("User-Agent", "RepoView/0.1")
-        .header("Accept", "application/vnd.github.v3+json")
-        .send()
-        .await?;
+        .header("Accept", "application/vnd.github.v3+json");
+
+    // Add token if provided
+    if let Some(t) = token {
+        if !t.is_empty() {
+            request = request.header("Authorization", format!("Bearer {}", t));
+        }
+    }
+
+    let response = request.send().await?;
 
     if !response.status().is_success() {
         return Err(RepoError::InvalidUrl(format!(
@@ -153,6 +160,38 @@ pub async fn search_github_repos(query: &str) -> Result<Vec<SearchResultItem>, R
         .collect();
 
     Ok(results)
+}
+
+// Settings management
+fn get_settings_path() -> PathBuf {
+    directories::ProjectDirs::from("com", "xnu", "RepoView")
+        .map(|dirs| dirs.config_dir().to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("./config"))
+        .join("settings.json")
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AppSettings {
+    pub github_token: Option<String>,
+}
+
+pub fn load_settings() -> AppSettings {
+    let path = get_settings_path();
+    if let Ok(content) = fs::read_to_string(&path) {
+        serde_json::from_str(&content).unwrap_or_default()
+    } else {
+        AppSettings::default()
+    }
+}
+
+pub fn save_settings(settings: &AppSettings) -> Result<(), RepoError> {
+    let path = get_settings_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let json = serde_json::to_string_pretty(settings)?;
+    fs::write(path, json)?;
+    Ok(())
 }
 
 pub fn parse_github_url(url: &str) -> Result<ParsedGitHubUrl, RepoError> {

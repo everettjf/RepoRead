@@ -5,7 +5,8 @@ use repo::{
     extract_zip, generate_repo_key, get_default_branch, get_repos_dir, list_repos as list_repos_impl,
     load_repo_info, load_tree, parse_github_url, read_file_content, save_repo_info, save_tree,
     search_github_repos as search_repos_impl,
-    FileContent, FileNode, ImportResult, RepoError, RepoInfo, SearchResultItem,
+    load_settings as load_settings_impl, save_settings as save_settings_impl,
+    FileContent, FileNode, ImportResult, RepoError, RepoInfo, SearchResultItem, AppSettings,
 };
 
 #[tauri::command]
@@ -89,8 +90,23 @@ fn get_file_language(file_path: String) -> String {
 }
 
 #[tauri::command]
-async fn search_github_repos(query: String) -> Result<Vec<SearchResultItem>, RepoError> {
-    search_repos_impl(&query).await
+fn get_repo_path(repo_key: String) -> String {
+    get_repos_dir().join(&repo_key).to_string_lossy().to_string()
+}
+
+#[tauri::command]
+async fn search_github_repos(query: String, token: Option<String>) -> Result<Vec<SearchResultItem>, RepoError> {
+    search_repos_impl(&query, token.as_deref()).await
+}
+
+#[tauri::command]
+fn get_settings() -> AppSettings {
+    load_settings_impl()
+}
+
+#[tauri::command]
+fn update_settings(settings: AppSettings) -> Result<(), RepoError> {
+    save_settings_impl(&settings)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -106,6 +122,9 @@ pub fn run() {
             delete_repo,
             get_file_language,
             search_github_repos,
+            get_settings,
+            update_settings,
+            get_repo_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -9,7 +9,8 @@
       "Bash(rustfmt:*)",
       "Bash(bun run build:*)",
       "Bash(bun run tauri:*)",
-      "Bash(/bin/rm:*)"
+      "Bash(/bin/rm:*)",
+      "Bash(bun add:*)"
     ]
   }
 }

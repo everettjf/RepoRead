@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { save } from "@tauri-apps/plugin-dialog";
+import * as Select from "@radix-ui/react-select";
 import { FileTree } from "./components/FileTree";
 import { CodeViewer } from "./components/CodeViewer";
 import { RepoList } from "./components/RepoList";
@@ -31,6 +32,16 @@ import "./App.css";
 
 type View = "home" | "repo" | "settings";
 type HomeTab = "home" | "trending" | "favorites";
+
+// Toast component
+function Toast({ message, onClose }: { message: string; onClose: () => void }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 2000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return <div className="toast">{message}</div>;
+}
 
 function formatStars(count: number): string {
   if (count >= 1000) {
@@ -111,11 +122,13 @@ function TrendingList({
   onImport,
   onFavorite,
   importingRepo,
+  favoriteKeys,
 }: {
   items: TrendingRepo[];
   onImport: (item: TrendingRepo) => void;
   onFavorite: (item: TrendingRepo) => void;
   importingRepo: string | null;
+  favoriteKeys: Set<string>;
 }) {
   if (items.length === 0) {
     return <p className="empty-state">No trending repositories found.</p>;
@@ -123,45 +136,52 @@ function TrendingList({
 
   return (
     <div className="trending-list">
-      {items.map((item) => (
-        <div key={item.full_name} className="trending-item">
-          <div className="trending-item-info">
-            <div className="trending-item-header">
-              <span className="trending-item-name">{item.full_name}</span>
-              {typeof item.stars === "number" && (
-                <span className="trending-item-stars">⭐ {formatStars(item.stars)}</span>
-              )}
+      {items.map((item) => {
+        const isFavorited = favoriteKeys.has(item.full_name);
+        return (
+          <div key={item.full_name} className="trending-item">
+            <div className="trending-item-info">
+              <div className="trending-item-header">
+                <span className="trending-item-name">{item.full_name}</span>
+                {typeof item.stars === "number" && (
+                  <span className="trending-item-stars">⭐ {formatStars(item.stars)}</span>
+                )}
+              </div>
+              {item.description && <p className="trending-item-desc">{item.description}</p>}
+              <div className="trending-item-meta">
+                {item.language && <span>{item.language}</span>}
+                {typeof item.forks === "number" && <span>🍴 {formatStars(item.forks)}</span>}
+                {typeof item.stars_today === "number" && (
+                  <span>✨ {formatStars(item.stars_today)} today</span>
+                )}
+              </div>
             </div>
-            {item.description && <p className="trending-item-desc">{item.description}</p>}
-            <div className="trending-item-meta">
-              {item.language && <span>{item.language}</span>}
-              {typeof item.forks === "number" && <span>🍴 {formatStars(item.forks)}</span>}
-              {typeof item.stars_today === "number" && (
-                <span>✨ {formatStars(item.stars_today)} today</span>
-              )}
+            <div className="trending-item-actions">
+              <button
+                className="trending-item-import"
+                onClick={() => onImport(item)}
+                disabled={importingRepo === item.full_name}
+              >
+                {importingRepo === item.full_name ? (
+                  <>
+                    <span className="spinner small"></span>
+                    Importing...
+                  </>
+                ) : (
+                  "Open"
+                )}
+              </button>
+              <button
+                className={`trending-item-favorite ${isFavorited ? "favorited" : ""}`}
+                onClick={() => onFavorite(item)}
+                title={isFavorited ? "Already in favorites" : "Add to favorites"}
+              >
+                {isFavorited ? "★" : "☆"}
+              </button>
             </div>
           </div>
-          <div className="trending-item-actions">
-            <button
-              className="trending-item-import"
-              onClick={() => onImport(item)}
-              disabled={importingRepo === item.full_name}
-            >
-              {importingRepo === item.full_name ? (
-                <>
-                  <span className="spinner small"></span>
-                  Importing...
-                </>
-              ) : (
-                "Open"
-              )}
-            </button>
-            <button className="trending-item-favorite" onClick={() => onFavorite(item)}>
-              Save
-            </button>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -222,10 +242,16 @@ function SettingsPage({
   settings,
   onSave,
   onBack,
+  favoritesCount,
+  onExport,
+  exporting,
 }: {
   settings: AppSettings;
   onSave: (settings: AppSettings) => Promise<void>;
   onBack: () => void;
+  favoritesCount: number;
+  onExport: (format: "json" | "markdown") => Promise<void>;
+  exporting: boolean;
 }) {
   const [token, setToken] = useState(settings.github_token || "");
   const [isSaving, setIsSaving] = useState(false);
@@ -245,6 +271,8 @@ function SettingsPage({
   const handleOpenGitHub = async () => {
     await openUrl("https://github.com/settings/tokens/new?description=RepoView&scopes=public_repo");
   };
+
+  const hasFavorites = favoritesCount > 0;
 
   return (
     <div className="app settings-view">
@@ -298,6 +326,31 @@ function SettingsPage({
             Open GitHub Token Page →
           </button>
         </section>
+
+        <section className="settings-section">
+          <h2>Export Favorites</h2>
+          <p className="settings-desc">
+            {hasFavorites
+              ? `Download your ${favoritesCount} favorite${favoritesCount > 1 ? "s" : ""} as JSON or Markdown.`
+              : "Add favorites from Trending to enable exports."}
+          </p>
+          <div className="export-buttons">
+            <button
+              className="save-button"
+              onClick={() => onExport("json")}
+              disabled={exporting || !hasFavorites}
+            >
+              Export JSON
+            </button>
+            <button
+              className="github-link-button"
+              onClick={() => onExport("markdown")}
+              disabled={exporting || !hasFavorites}
+            >
+              Export Markdown
+            </button>
+          </div>
+        </section>
       </main>
     </div>
   );
@@ -327,15 +380,44 @@ function App() {
   const [trendingItems, setTrendingItems] = useState<TrendingRepo[]>([]);
   const [trendingSince, setTrendingSince] = useState("daily");
   const [trendingLanguage, setTrendingLanguage] = useState("");
-  const [trendingSpokenLanguage, setTrendingSpokenLanguage] = useState("");
   const [trendingLoading, setTrendingLoading] = useState(false);
   const [trendingError, setTrendingError] = useState("");
   const [importingTrending, setImportingTrending] = useState<string | null>(null);
+
+  // Top 20 popular programming languages
+  const popularLanguages = [
+    "Python",
+    "JavaScript",
+    "TypeScript",
+    "Java",
+    "C#",
+    "C++",
+    "Go",
+    "Rust",
+    "PHP",
+    "Swift",
+    "Kotlin",
+    "Ruby",
+    "C",
+    "Scala",
+    "Shell",
+    "Dart",
+    "R",
+    "Lua",
+    "Haskell",
+    "Julia",
+  ];
 
   // Favorites
   const [favorites, setFavorites] = useState<FavoriteRepo[]>([]);
   const [favoritesError, setFavoritesError] = useState("");
   const [exporting, setExporting] = useState(false);
+
+  // Toast
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Favorites lookup set for quick check
+  const favoriteKeys = new Set(favorites.map((f) => `${f.owner}/${f.repo}`));
 
   // Load recent repos and settings on mount
   useEffect(() => {
@@ -385,7 +467,7 @@ function App() {
       const items = await getTrendingRepos(
         trendingLanguage.trim() ? trendingLanguage.trim() : null,
         trendingSince,
-        trendingSpokenLanguage.trim() ? trendingSpokenLanguage.trim() : null
+        null
       );
       setTrendingItems(items);
     } catch (err) {
@@ -555,7 +637,10 @@ function App() {
     const exists = favorites.some(
       (fav) => fav.owner === item.owner && fav.repo === item.repo
     );
-    if (exists) return;
+    if (exists) {
+      setToastMessage("Already in favorites");
+      return;
+    }
 
     const next: FavoriteRepo[] = [
       {
@@ -573,6 +658,7 @@ function App() {
     try {
       await saveFavorites(next);
       setFavorites(next);
+      setToastMessage("Added to favorites");
     } catch (err) {
       setFavoritesError(String(err));
     }
@@ -626,6 +712,9 @@ function App() {
         settings={settings}
         onSave={handleSaveSettings}
         onBack={() => setView("home")}
+        favoritesCount={favorites.length}
+        onExport={handleExportFavorites}
+        exporting={exporting}
       />
     );
   }
@@ -693,98 +782,102 @@ function App() {
       }
 
       if (homeTab === "trending") {
+        const timeframeLabels: Record<string, string> = {
+          daily: "Today",
+          weekly: "This Week",
+          monthly: "This Month",
+        };
+
         return (
           <div className="trending-view">
             <div className="trending-header">
-              <div>
+              <div className="trending-header-left">
                 <h3>GitHub Trending</h3>
-                <p>Explore what’s popular and open repositories instantly.</p>
+                <p>Explore what's popular and open repositories instantly.</p>
               </div>
-              <span className="trending-badge">{trendingSince}</span>
-            </div>
-            <div className="trending-controls">
-              <div className="trending-field">
-                <label>Timeframe</label>
-                <select
-                  value={trendingSince}
-                  onChange={(e) => setTrendingSince(e.target.value)}
+              <div className="trending-header-controls">
+                <Select.Root
+                  value={trendingLanguage || "all"}
+                  onValueChange={(val) => setTrendingLanguage(val === "all" ? "" : val)}
                 >
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
-                </select>
+                  <Select.Trigger className="SelectTrigger">
+                    <Select.Value placeholder="All Languages" />
+                    <Select.Icon className="SelectIcon">
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+                        <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                      </svg>
+                    </Select.Icon>
+                  </Select.Trigger>
+                  <Select.Portal>
+                    <Select.Content className="SelectContent" position="popper" sideOffset={4}>
+                      <Select.Viewport className="SelectViewport">
+                        <Select.Item value="all" className="SelectItem">
+                          <Select.ItemText>All Languages</Select.ItemText>
+                        </Select.Item>
+                        <Select.Separator className="SelectSeparator" />
+                        {popularLanguages.map((lang) => (
+                          <Select.Item key={lang} value={lang} className="SelectItem">
+                            <Select.ItemText>{lang}</Select.ItemText>
+                          </Select.Item>
+                        ))}
+                      </Select.Viewport>
+                    </Select.Content>
+                  </Select.Portal>
+                </Select.Root>
+
+                <Select.Root value={trendingSince} onValueChange={setTrendingSince}>
+                  <Select.Trigger className="SelectTrigger">
+                    <Select.Value>{timeframeLabels[trendingSince]}</Select.Value>
+                    <Select.Icon className="SelectIcon">
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+                        <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                      </svg>
+                    </Select.Icon>
+                  </Select.Trigger>
+                  <Select.Portal>
+                    <Select.Content className="SelectContent" position="popper" sideOffset={4}>
+                      <Select.Viewport className="SelectViewport">
+                        <Select.Item value="daily" className="SelectItem">
+                          <Select.ItemText>Today</Select.ItemText>
+                        </Select.Item>
+                        <Select.Item value="weekly" className="SelectItem">
+                          <Select.ItemText>This Week</Select.ItemText>
+                        </Select.Item>
+                        <Select.Item value="monthly" className="SelectItem">
+                          <Select.ItemText>This Month</Select.ItemText>
+                        </Select.Item>
+                      </Select.Viewport>
+                    </Select.Content>
+                  </Select.Portal>
+                </Select.Root>
+
+                <button
+                  className="trending-refresh"
+                  onClick={loadTrending}
+                  disabled={trendingLoading}
+                >
+                  {trendingLoading ? "..." : "↻"}
+                </button>
               </div>
-              <div className="trending-field">
-                <label>Language</label>
-                <input
-                  type="text"
-                  placeholder="e.g. TypeScript"
-                  value={trendingLanguage}
-                  onChange={(e) => setTrendingLanguage(e.target.value)}
-                />
-              </div>
-              <div className="trending-field">
-                <label>Spoken Language</label>
-                <input
-                  type="text"
-                  placeholder="e.g. en, zh"
-                  value={trendingSpokenLanguage}
-                  onChange={(e) => setTrendingSpokenLanguage(e.target.value)}
-                />
-              </div>
-              <button
-                className="trending-refresh"
-                onClick={loadTrending}
-                disabled={trendingLoading}
-              >
-                {trendingLoading ? "Loading..." : "Refresh"}
-              </button>
             </div>
             {trendingError && <p className="input-error">{trendingError}</p>}
             {trendingLoading ? (
               <p className="loading-state">Loading trending repositories...</p>
             ) : (
               <TrendingList
-                items={trendingItems}
+                items={trendingItems.slice(0, 20)}
                 onImport={handleTrendingImport}
                 onFavorite={handleAddFavorite}
                 importingRepo={importingTrending}
+                favoriteKeys={favoriteKeys}
               />
             )}
           </div>
         );
       }
 
-      const hasFavorites = favorites.length > 0;
-
       return (
         <div className="favorites-view">
-          <div className="favorites-actions">
-            <div className="favorites-actions-info">
-              <h3>Exports</h3>
-              <p>
-                {hasFavorites
-                  ? "Download your favorites as JSON or Markdown."
-                  : "Add favorites from Trending to enable exports."}
-              </p>
-            </div>
-            <div className="favorites-actions-buttons">
-              <button
-                className="favorites-export"
-                onClick={() => handleExportFavorites("json")}
-                disabled={exporting || !hasFavorites}
-              >
-                Export JSON
-              </button>
-              <button
-                className="favorites-export ghost"
-                onClick={() => handleExportFavorites("markdown")}
-                disabled={exporting || !hasFavorites}
-              >
-                Export Markdown
-              </button>
-            </div>
-          </div>
           {favoritesError && <p className="input-error">{favoritesError}</p>}
           <FavoritesList
             items={favorites}
@@ -836,6 +929,10 @@ function App() {
 
           {renderHomeContent()}
         </main>
+
+        {toastMessage && (
+          <Toast message={toastMessage} onClose={() => setToastMessage(null)} />
+        )}
       </div>
     );
   }

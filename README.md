@@ -34,11 +34,8 @@ A lightweight desktop app for browsing GitHub repositories without cloning. Perf
 ## Screenshots
 
 <p align="center">
-  <img src="screenshots/screenshot1.png" width="800" alt="Screenshot 1">
-</p>
-
-<p align="center">
-  <img src="screenshots/screenshot2.png" width="800" alt="Screenshot 2">
+  <img src="screenshots/screenshot1.png" width="49%" alt="Screenshot 1">
+  <img src="screenshots/screenshot2.png" width="49%" alt="Screenshot 2">
 </p>
 
 ## Installation

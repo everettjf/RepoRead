@@ -8,6 +8,7 @@ use repo::{
     load_settings as load_settings_impl, save_settings as save_settings_impl,
     load_favorites as load_favorites_impl, save_favorites as save_favorites_impl,
     export_favorites as export_favorites_impl,
+    get_screenshots_dir as get_screenshots_dir_impl, save_screenshot as save_screenshot_impl,
     FileContent, FileNode, ImportResult, RepoError, RepoInfo, SearchResultItem, AppSettings,
     TrendingRepo, FavoriteRepo,
 };
@@ -136,6 +137,26 @@ fn export_favorites(format: String, path: String) -> Result<(), RepoError> {
     export_favorites_impl(std::path::Path::new(&path), &format)
 }
 
+#[tauri::command]
+fn save_screenshot(base64_data: String, filename: String, copy_to_clipboard: bool) -> Result<String, RepoError> {
+    save_screenshot_impl(&base64_data, &filename, copy_to_clipboard)
+}
+
+#[tauri::command]
+fn get_screenshots_path() -> String {
+    get_screenshots_dir_impl().to_string_lossy().to_string()
+}
+
+#[tauri::command]
+fn open_screenshots_folder() -> Result<(), RepoError> {
+    let path = get_screenshots_dir_impl();
+    std::fs::create_dir_all(&path)?;
+    opener::open(&path).map_err(|e| RepoError::IoError(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        e.to_string()
+    )))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -157,6 +178,9 @@ pub fn run() {
             get_favorites,
             save_favorites,
             export_favorites,
+            save_screenshot,
+            get_screenshots_path,
+            open_screenshots_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

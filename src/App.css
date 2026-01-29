@@ -1094,6 +1094,65 @@ body {
   flex-wrap: wrap;
 }
 
+/* Settings Toggle */
+.settings-toggle-row {
+  margin-bottom: 16px;
+}
+
+.settings-toggle-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.settings-toggle-label:hover {
+  border-color: var(--accent-color);
+}
+
+.settings-toggle-label span {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.settings-toggle {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 44px;
+  height: 24px;
+  background: var(--bg-tertiary);
+  border-radius: 12px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.settings-toggle::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background: var(--text-secondary);
+  border-radius: 50%;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.settings-toggle:checked {
+  background: var(--accent-color);
+}
+
+.settings-toggle:checked::before {
+  transform: translateX(20px);
+  background: white;
+}
+
 /* Repo View */
 .repo-view {
   display: flex;
@@ -1525,6 +1584,73 @@ body {
   background: var(--bg-hover);
 }
 
+/* Screenshot Button */
+.screenshot-button {
+  padding: 3px 10px;
+  font-size: 14px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+  line-height: 1;
+}
+
+.screenshot-button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--accent-color);
+}
+
+.screenshot-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Screenshot Overlay */
+.screenshot-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  cursor: crosshair;
+  z-index: 9999;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.screenshot-instructions {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  color: white;
+  pointer-events: none;
+}
+
+.screenshot-instructions p {
+  font-size: 18px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.screenshot-instructions .screenshot-hint {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.screenshot-selection {
+  position: fixed;
+  border: 2px solid var(--accent-color);
+  background: rgba(0, 120, 212, 0.1);
+  pointer-events: none;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+}
+
 /* Touch-friendly adjustments for iPad */
 @media (pointer: coarse) {
   .tree-item {
@@ -1546,6 +1672,19 @@ body {
 
   .search-item-import {
     padding: 12px 24px;
+  }
+
+  .screenshot-button {
+    padding: 6px 14px;
+    font-size: 16px;
+  }
+
+  .screenshot-instructions p {
+    font-size: 22px;
+  }
+
+  .screenshot-instructions .screenshot-hint {
+    font-size: 16px;
   }
 }
 

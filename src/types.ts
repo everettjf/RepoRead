@@ -40,6 +40,7 @@ export interface SearchResultItem {
 
 export interface AppSettings {
   github_token: string | null;
+  copy_screenshot_to_clipboard: boolean;
 }
 
 export interface TrendingRepo {

@@ -323,9 +323,24 @@ fn get_settings_path() -> PathBuf {
         .join("settings.json")
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
     pub github_token: Option<String>,
+    #[serde(default = "default_true")]
+    pub copy_screenshot_to_clipboard: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            github_token: None,
+            copy_screenshot_to_clipboard: true,
+        }
+    }
 }
 
 pub fn load_settings() -> AppSettings {
@@ -848,4 +863,50 @@ pub fn delete_repo(repo_key: &str) -> Result<(), RepoError> {
 
     fs::remove_dir_all(&repo_dir)?;
     Ok(())
+}
+
+pub fn get_screenshots_dir() -> PathBuf {
+    directories::ProjectDirs::from("com", "xnu", "RepoRead")
+        .map(|dirs| dirs.data_dir().to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("./data"))
+        .join("screenshots")
+}
+
+pub fn save_screenshot(base64_data: &str, filename: &str, copy_to_clipboard: bool) -> Result<String, RepoError> {
+    use base64::Engine;
+    use arboard::{Clipboard, ImageData};
+
+    let screenshots_dir = get_screenshots_dir();
+    fs::create_dir_all(&screenshots_dir)?;
+
+    // Remove data URL prefix if present
+    let data = base64_data
+        .strip_prefix("data:image/png;base64,")
+        .unwrap_or(base64_data);
+
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .map_err(|e| RepoError::InvalidUrl(format!("Invalid base64 data: {}", e)))?;
+
+    // Save to file
+    let file_path = screenshots_dir.join(filename);
+    fs::write(&file_path, &bytes)?;
+
+    // Copy to clipboard if enabled
+    if copy_to_clipboard {
+        if let Ok(img) = image::load_from_memory(&bytes) {
+            let rgba = img.to_rgba8();
+            let (width, height) = rgba.dimensions();
+            let image_data = ImageData {
+                width: width as usize,
+                height: height as usize,
+                bytes: rgba.into_raw().into(),
+            };
+            if let Ok(mut clipboard) = Clipboard::new() {
+                let _ = clipboard.set_image(image_data);
+            }
+        }
+    }
+
+    Ok(file_path.to_string_lossy().to_string())
 }

@@ -1,6 +1,8 @@
-import { Suspense, lazy, useState, useMemo } from "react";
+import { Suspense, lazy, useState, useMemo, useRef } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { FileContent, RepoInfo } from "../types";
+import { ScreenshotOverlay } from "./ScreenshotOverlay";
+import { saveScreenshot } from "../api";
 
 const MonacoEditor = lazy(() => import("@monaco-editor/react"));
 
@@ -9,6 +11,8 @@ interface CodeViewerProps {
   filePath: string;
   isLoading: boolean;
   repoInfo: RepoInfo | null;
+  copyScreenshotToClipboard?: boolean;
+  onScreenshotSaved?: (copiedToClipboard: boolean) => void;
 }
 
 function LoadingSpinner() {
@@ -133,8 +137,36 @@ export function CodeViewer({
   filePath,
   isLoading,
   repoInfo,
+  copyScreenshotToClipboard = true,
+  onScreenshotSaved,
 }: CodeViewerProps) {
   const [showPreview, setShowPreview] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const codeContentRef = useRef<HTMLDivElement>(null);
+
+  const handleScreenshotCapture = async (dataUrl: string) => {
+    setIsCapturing(false);
+    setIsSaving(true);
+
+    try {
+      const timestamp = new Date()
+        .toISOString()
+        .replace(/:/g, "-")
+        .replace(/\.\d{3}Z$/, "");
+      const filename = `screenshot_${timestamp}.png`;
+      await saveScreenshot(dataUrl, filename, copyScreenshotToClipboard);
+      onScreenshotSaved?.(copyScreenshotToClipboard);
+    } catch (error) {
+      console.error("Failed to save screenshot:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleScreenshotCancel = () => {
+    setIsCapturing(false);
+  };
 
   const isMarkdown =
     filePath.endsWith(".md") || filePath.endsWith(".markdown");
@@ -209,9 +241,17 @@ export function CodeViewer({
             {showPreview ? "Code" : "Preview"}
           </button>
         )}
+        <button
+          className="screenshot-button"
+          onClick={() => setIsCapturing(true)}
+          disabled={isSaving}
+          title="Take screenshot"
+        >
+          {isSaving ? "..." : "\uD83D\uDCF7"}
+        </button>
         <span className="language-badge">{content.language}</span>
       </div>
-      <div className="code-content">
+      <div className="code-content" ref={codeContentRef}>
         {isMarkdown && showPreview ? (
           <MarkdownPreview content={content.content} />
         ) : (
@@ -248,6 +288,13 @@ export function CodeViewer({
           </Suspense>
         )}
       </div>
+      {isCapturing && (
+        <ScreenshotOverlay
+          targetRef={codeContentRef}
+          onCapture={handleScreenshotCapture}
+          onCancel={handleScreenshotCancel}
+        />
+      )}
     </div>
   );
 }

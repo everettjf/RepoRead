@@ -18,6 +18,7 @@ import {
   getFavorites,
   saveFavorites,
   exportFavorites,
+  openScreenshotsFolder,
 } from "./api";
 import type {
   FileNode,
@@ -256,11 +257,12 @@ function SettingsPage({
   const [token, setToken] = useState(settings.github_token || "");
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [openingScreenshots, setOpeningScreenshots] = useState(false);
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await onSave({ github_token: token || null });
+      await onSave({ ...settings, github_token: token || null });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } finally {
@@ -351,6 +353,43 @@ function SettingsPage({
             </button>
           </div>
         </section>
+
+        <section className="settings-section">
+          <h2>Screenshots</h2>
+          <p className="settings-desc">
+            Screenshots are saved when you use the camera button in the code viewer.
+          </p>
+          <div className="settings-toggle-row">
+            <label className="settings-toggle-label">
+              <span>Copy to clipboard automatically</span>
+              <input
+                type="checkbox"
+                className="settings-toggle"
+                checked={settings.copy_screenshot_to_clipboard}
+                onChange={async (e) => {
+                  const newSettings = { ...settings, copy_screenshot_to_clipboard: e.target.checked };
+                  await onSave(newSettings);
+                }}
+              />
+            </label>
+          </div>
+          <button
+            className="github-link-button"
+            onClick={async () => {
+              setOpeningScreenshots(true);
+              try {
+                await openScreenshotsFolder();
+              } catch (err) {
+                console.error("Failed to open screenshots folder:", err);
+              } finally {
+                setOpeningScreenshots(false);
+              }
+            }}
+            disabled={openingScreenshots}
+          >
+            {openingScreenshots ? "Opening..." : "Open Screenshots Folder"}
+          </button>
+        </section>
       </main>
     </div>
   );
@@ -374,7 +413,10 @@ function App() {
   const [importingRepo, setImportingRepo] = useState<string | null>(null);
 
   // Settings
-  const [settings, setSettings] = useState<AppSettings>({ github_token: null });
+  const [settings, setSettings] = useState<AppSettings>({
+    github_token: null,
+    copy_screenshot_to_clipboard: true,
+  });
 
   // Trending
   const [trendingItems, setTrendingItems] = useState<TrendingRepo[]>([]);
@@ -969,9 +1011,17 @@ function App() {
             filePath={selectedPath}
             isLoading={isLoadingFile}
             repoInfo={currentRepo}
+            copyScreenshotToClipboard={settings.copy_screenshot_to_clipboard}
+            onScreenshotSaved={(copied) => setToastMessage(
+              copied ? "Screenshot saved & copied to clipboard" : "Screenshot saved"
+            )}
           />
         </main>
       </div>
+
+      {toastMessage && (
+        <Toast message={toastMessage} onClose={() => setToastMessage(null)} />
+      )}
     </div>
   );
 }

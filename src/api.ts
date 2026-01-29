@@ -77,3 +77,15 @@ export async function saveFavorites(favorites: FavoriteRepo[]): Promise<void> {
 export async function exportFavorites(format: "json" | "markdown", path: string): Promise<void> {
   return invoke<void>("export_favorites", { format, path });
 }
+
+export async function saveScreenshot(base64Data: string, filename: string, copyToClipboard: boolean): Promise<string> {
+  return invoke<string>("save_screenshot", { base64Data, filename, copyToClipboard });
+}
+
+export async function getScreenshotsPath(): Promise<string> {
+  return invoke<string>("get_screenshots_path");
+}
+
+export async function openScreenshotsFolder(): Promise<void> {
+  return invoke<void>("open_screenshots_folder");
+}

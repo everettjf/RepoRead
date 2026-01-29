@@ -26,3 +26,7 @@ chrono = { version = "0.4", features = ["serde"] }
 thiserror = "2"
 directories = "6"
 urlencoding = "2"
+base64 = "0.22"
+opener = "0.7"
+arboard = { version = "3", features = ["image"] }
+image = { version = "0.25", default-features = false, features = ["png"] }

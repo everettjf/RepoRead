@@ -67,3 +67,13 @@ export interface FavoriteRepo {
   stars: number | null;
   added_at: string;
 }
+
+export interface FileHistoryEntry {
+  path: string;
+  opened_at: string;
+}
+
+export interface RepoFileHistory {
+  repo_url: string;
+  entries: FileHistoryEntry[];
+}

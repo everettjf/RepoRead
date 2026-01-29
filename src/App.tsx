@@ -6,6 +6,8 @@ import { FileTree } from "./components/FileTree";
 import { CodeViewer, type CodeViewerHandle } from "./components/CodeViewer";
 import { InterpretModal } from "./components/InterpretModal";
 import { RepoList } from "./components/RepoList";
+import { FileSearch } from "./components/FileSearch";
+import { FileHistory } from "./components/FileHistory";
 import {
   importRepoFromGithub,
   readTextFile,
@@ -21,6 +23,8 @@ import {
   exportFavorites,
   openScreenshotsFolder,
   interpretCode,
+  getFileHistory,
+  addFileHistory,
 } from "./api";
 import type {
   FileNode,
@@ -30,6 +34,7 @@ import type {
   AppSettings,
   TrendingRepo,
   FavoriteRepo,
+  FileHistoryEntry,
 } from "./types";
 import "./App.css";
 
@@ -594,6 +599,12 @@ function App() {
   const [interpretResult, setInterpretResult] = useState<string | null>(null);
   const [interpretError, setInterpretError] = useState<string | null>(null);
 
+  // File Search
+  const [fileSearchOpen, setFileSearchOpen] = useState(false);
+
+  // File History
+  const [fileHistory, setFileHistory] = useState<FileHistoryEntry[]>([]);
+
   // Favorites lookup set for quick check
   const favoriteKeys = new Set(favorites.map((f) => `${f.owner}/${f.repo}`));
 
@@ -603,6 +614,37 @@ function App() {
     loadSettings();
     loadFavorites();
   }, []);
+
+  // Keyboard shortcut for file search (Cmd+P / Ctrl+P)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "p" && view === "repo") {
+        e.preventDefault();
+        setFileSearchOpen(true);
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [view]);
+
+  // Load file history when repo changes
+  useEffect(() => {
+    if (currentRepo?.url) {
+      loadFileHistory(currentRepo.url);
+    } else {
+      setFileHistory([]);
+    }
+  }, [currentRepo?.url]);
+
+  const loadFileHistory = async (repoUrl: string) => {
+    try {
+      const history = await getFileHistory(repoUrl);
+      setFileHistory(history);
+    } catch (err) {
+      console.error("Failed to load file history:", err);
+    }
+  };
 
   useEffect(() => {
     if (homeTab === "trending" && trendingItems.length === 0 && !trendingLoading) {
@@ -786,6 +828,14 @@ function App() {
       try {
         const content = await readTextFile(currentRepo.key, path);
         setFileContent(content);
+
+        // Add to file history
+        if (currentRepo.url) {
+          await addFileHistory(currentRepo.url, path);
+          // Refresh history
+          const history = await getFileHistory(currentRepo.url);
+          setFileHistory(history);
+        }
       } catch (err) {
         setError(String(err));
         setFileContent(null);
@@ -1169,11 +1219,19 @@ function App() {
         <div className="repo-header-actions">
           <button
             className="toolbar-button"
+            onClick={() => setFileSearchOpen(true)}
+            title="Quick open file (⌘P)"
+          >
+            🔍 Find File
+          </button>
+          <FileHistory history={fileHistory} onFileSelect={handleFileSelect} />
+          <button
+            className="toolbar-button"
             onClick={handleInterpret}
             disabled={!fileContent || fileContent.is_binary}
             title="Interpret selected code"
           >
-            🔍 Interpret
+            💡 Interpret
           </button>
           <button
             className="toolbar-button"
@@ -1228,6 +1286,13 @@ function App() {
           setInterpretResult(null);
           setInterpretError(null);
         }}
+      />
+
+      <FileSearch
+        isOpen={fileSearchOpen}
+        onClose={() => setFileSearchOpen(false)}
+        tree={tree}
+        onFileSelect={handleFileSelect}
       />
     </div>
   );

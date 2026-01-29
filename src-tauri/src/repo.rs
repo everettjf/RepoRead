@@ -461,6 +461,89 @@ pub fn export_favorites(path: &Path, format: &str) -> Result<(), RepoError> {
     Ok(())
 }
 
+// File History
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileHistoryEntry {
+    pub path: String,
+    pub opened_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RepoFileHistory {
+    repo_url: String,
+    entries: Vec<FileHistoryEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct AllFileHistory {
+    repos: Vec<RepoFileHistory>,
+}
+
+fn get_file_history_path() -> PathBuf {
+    directories::ProjectDirs::from("com", "xnu", "RepoRead")
+        .map(|dirs| dirs.config_dir().to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("./config"))
+        .join("file_history.json")
+}
+
+fn load_all_file_history() -> AllFileHistory {
+    let path = get_file_history_path();
+    if let Ok(content) = fs::read_to_string(&path) {
+        serde_json::from_str(&content).unwrap_or_default()
+    } else {
+        AllFileHistory::default()
+    }
+}
+
+fn save_all_file_history(history: &AllFileHistory) -> Result<(), RepoError> {
+    let path = get_file_history_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let json = serde_json::to_string_pretty(history)?;
+    fs::write(path, json)?;
+    Ok(())
+}
+
+pub fn get_file_history(repo_url: &str) -> Vec<FileHistoryEntry> {
+    let all = load_all_file_history();
+    all.repos
+        .iter()
+        .find(|r| r.repo_url == repo_url)
+        .map(|r| r.entries.clone())
+        .unwrap_or_default()
+}
+
+const MAX_HISTORY_ENTRIES: usize = 100;
+
+pub fn add_file_history(repo_url: &str, file_path: &str) -> Result<(), RepoError> {
+    let mut all = load_all_file_history();
+
+    let entry = FileHistoryEntry {
+        path: file_path.to_string(),
+        opened_at: chrono::Utc::now().to_rfc3339(),
+    };
+
+    // Find or create repo history
+    if let Some(repo_history) = all.repos.iter_mut().find(|r| r.repo_url == repo_url) {
+        // Remove existing entry for this path (to move it to top)
+        repo_history.entries.retain(|e| e.path != file_path);
+        // Add new entry at the beginning
+        repo_history.entries.insert(0, entry);
+        // Limit history size
+        repo_history.entries.truncate(MAX_HISTORY_ENTRIES);
+    } else {
+        // Create new repo history
+        all.repos.push(RepoFileHistory {
+            repo_url: repo_url.to_string(),
+            entries: vec![entry],
+        });
+    }
+
+    save_all_file_history(&all)
+}
+
 pub fn parse_github_url(url: &str) -> Result<ParsedGitHubUrl, RepoError> {
     let url = url.trim().trim_end_matches('/');
 

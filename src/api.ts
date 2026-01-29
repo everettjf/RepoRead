@@ -8,6 +8,7 @@ import type {
   AppSettings,
   TrendingRepo,
   FavoriteRepo,
+  FileHistoryEntry,
 } from "./types";
 
 export async function importRepoFromGithub(url: string): Promise<ImportResult> {
@@ -106,4 +107,12 @@ export async function interpretCode(
     project,
     model,
   });
+}
+
+export async function getFileHistory(repoUrl: string): Promise<FileHistoryEntry[]> {
+  return invoke<FileHistoryEntry[]>("get_file_history", { repoUrl });
+}
+
+export async function addFileHistory(repoUrl: string, filePath: string): Promise<void> {
+  return invoke<void>("add_file_history", { repoUrl, filePath });
 }

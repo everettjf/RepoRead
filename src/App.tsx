@@ -25,6 +25,7 @@ import {
   interpretCode,
   getFileHistory,
   addFileHistory,
+  createGist,
 } from "./api";
 import type {
   FileNode,
@@ -291,7 +292,7 @@ function SettingsPage({
   };
 
   const handleOpenGitHub = async () => {
-    await openUrl("https://github.com/settings/tokens/new?description=RepoRead&scopes=public_repo");
+    await openUrl("https://github.com/settings/tokens/new?description=RepoRead&scopes=public_repo,gist");
   };
 
   const hasFavorites = favoritesCount > 0;
@@ -340,7 +341,7 @@ function SettingsPage({
             <li>Click the button below to open GitHub token settings</li>
             <li>Sign in to GitHub if prompted</li>
             <li>Set expiration (recommend: 90 days or longer)</li>
-            <li>Under "Select scopes", check <code>public_repo</code></li>
+            <li>Under "Select scopes", check <code>public_repo</code> & <code>gist</code></li>
             <li>Click "Generate token" at the bottom</li>
             <li>Copy the token and paste it above</li>
           </ol>
@@ -604,6 +605,9 @@ function App() {
 
   // File History
   const [fileHistory, setFileHistory] = useState<FileHistoryEntry[]>([]);
+
+  // Create Gist
+  const [creatingGist, setCreatingGist] = useState(false);
 
   // Favorites lookup set for quick check
   const favoriteKeys = new Set(favorites.map((f) => `${f.owner}/${f.repo}`));
@@ -895,6 +899,43 @@ function App() {
       setInterpretError(String(err));
     } finally {
       setInterpretLoading(false);
+    }
+  };
+
+  const handleCreateGist = async () => {
+    if (!settings.github_token) {
+      setToastMessage("Please set GitHub token in Settings first");
+      return;
+    }
+
+    const selectedText = codeViewerRef.current?.getSelectedText() || "";
+    if (!selectedText.trim()) {
+      setToastMessage("Please select some code first");
+      return;
+    }
+
+    setCreatingGist(true);
+
+    try {
+      const filename = selectedPath ? selectedPath.split("/").pop() || "snippet.txt" : "snippet.txt";
+      const project = currentRepo ? `${currentRepo.owner}/${currentRepo.repo}` : "RepoRead";
+      const description = `Code snippet from ${project}`;
+
+      const result = await createGist(
+        settings.github_token,
+        filename,
+        selectedText,
+        description,
+        false // private gist
+      );
+
+      // Open the gist URL in browser
+      await openUrl(result.html_url);
+      setToastMessage("Gist created successfully");
+    } catch (err) {
+      setToastMessage(`Failed to create gist: ${String(err)}`);
+    } finally {
+      setCreatingGist(false);
     }
   };
 
@@ -1232,6 +1273,14 @@ function App() {
             title="Interpret selected code"
           >
             💡 Interpret
+          </button>
+          <button
+            className="toolbar-button"
+            onClick={handleCreateGist}
+            disabled={!fileContent || fileContent.is_binary || creatingGist}
+            title="Create GitHub Gist from selected code"
+          >
+            {creatingGist ? "Creating..." : "📋 Create Gist"}
           </button>
           <button
             className="toolbar-button"

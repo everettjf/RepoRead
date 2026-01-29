@@ -11,8 +11,9 @@ use repo::{
     get_screenshots_dir as get_screenshots_dir_impl, save_screenshot as save_screenshot_impl,
     interpret_code as interpret_code_impl,
     get_file_history as get_file_history_impl, add_file_history as add_file_history_impl,
+    create_gist as create_gist_impl,
     FileContent, FileNode, ImportResult, RepoError, RepoInfo, SearchResultItem, AppSettings,
-    TrendingRepo, FavoriteRepo, FileHistoryEntry,
+    TrendingRepo, FavoriteRepo, FileHistoryEntry, CreateGistResult,
 };
 
 #[tauri::command]
@@ -181,6 +182,17 @@ fn add_file_history(repo_url: String, file_path: String) -> Result<(), RepoError
     add_file_history_impl(&repo_url, &file_path)
 }
 
+#[tauri::command]
+async fn create_gist(
+    token: String,
+    filename: String,
+    content: String,
+    description: String,
+    public: bool,
+) -> Result<CreateGistResult, RepoError> {
+    create_gist_impl(&token, &filename, &content, &description, public).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -208,6 +220,7 @@ pub fn run() {
             interpret_code,
             get_file_history,
             add_file_history,
+            create_gist,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

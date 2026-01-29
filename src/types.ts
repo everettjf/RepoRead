@@ -77,3 +77,9 @@ export interface RepoFileHistory {
   repo_url: string;
   entries: FileHistoryEntry[];
 }
+
+export interface CreateGistResult {
+  url: string;
+  html_url: string;
+  id: string;
+}

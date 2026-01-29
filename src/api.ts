@@ -9,6 +9,7 @@ import type {
   TrendingRepo,
   FavoriteRepo,
   FileHistoryEntry,
+  CreateGistResult,
 } from "./types";
 
 export async function importRepoFromGithub(url: string): Promise<ImportResult> {
@@ -115,4 +116,20 @@ export async function getFileHistory(repoUrl: string): Promise<FileHistoryEntry[
 
 export async function addFileHistory(repoUrl: string, filePath: string): Promise<void> {
   return invoke<void>("add_file_history", { repoUrl, filePath });
+}
+
+export async function createGist(
+  token: string,
+  filename: string,
+  content: string,
+  description: string,
+  isPublic: boolean
+): Promise<CreateGistResult> {
+  return invoke<CreateGistResult>("create_gist", {
+    token,
+    filename,
+    content,
+    description,
+    public: isPublic,
+  });
 }

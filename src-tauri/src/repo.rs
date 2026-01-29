@@ -1082,3 +1082,79 @@ pub async fn interpret_code(
 
     Ok(text)
 }
+
+// GitHub Gist API
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateGistResult {
+    pub url: String,
+    pub html_url: String,
+    pub id: String,
+}
+
+#[derive(Debug, Serialize)]
+struct GistFile {
+    content: String,
+}
+
+#[derive(Debug, Serialize)]
+struct CreateGistRequest {
+    description: String,
+    public: bool,
+    files: std::collections::HashMap<String, GistFile>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GistResponse {
+    id: String,
+    url: String,
+    html_url: String,
+}
+
+pub async fn create_gist(
+    token: &str,
+    filename: &str,
+    content: &str,
+    description: &str,
+    public: bool,
+) -> Result<CreateGistResult, RepoError> {
+    let mut files = std::collections::HashMap::new();
+    files.insert(
+        filename.to_string(),
+        GistFile {
+            content: content.to_string(),
+        },
+    );
+
+    let request = CreateGistRequest {
+        description: description.to_string(),
+        public,
+        files,
+    };
+
+    let client = reqwest::Client::new();
+    let response = client
+        .post("https://api.github.com/gists")
+        .header("User-Agent", "RepoRead/0.1")
+        .header("Accept", "application/vnd.github.v3+json")
+        .header("Authorization", format!("Bearer {}", token))
+        .json(&request)
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(RepoError::InvalidUrl(format!(
+            "GitHub Gist API error: HTTP {} - {}",
+            status, body
+        )));
+    }
+
+    let result: GistResponse = response.json().await?;
+    Ok(CreateGistResult {
+        url: result.url,
+        html_url: result.html_url,
+        id: result.id,
+    })
+}

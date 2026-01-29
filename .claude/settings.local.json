@@ -14,7 +14,8 @@
       "Bash(/usr/bin/sips:*)",
       "Bash(/usr/bin/iconutil:*)",
       "Bash(/bin/ls:*)",
-      "Bash(bun run tsc:*)"
+      "Bash(bun run tsc:*)",
+      "Bash(chmod:*)"
     ]
   }
 }

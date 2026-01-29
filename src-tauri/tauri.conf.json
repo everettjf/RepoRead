@@ -38,6 +38,9 @@
     "shortDescription": "Read GitHub repositories on iPad",
     "macOS": {
       "bundleName": "RepoRead"
+    },
+    "iOS": {
+      "infoPlist": "Info.iOS.plist"
     }
   }
 }

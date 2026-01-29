@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import type { FileNode } from "../types";
 
 interface FileTreeProps {
@@ -12,22 +12,21 @@ interface TreeNodeProps {
   depth: number;
   onFileSelect: (path: string) => void;
   selectedPath?: string;
-  parentPath: string;
+  expandedPaths: Set<string>;
+  onToggle: (path: string) => void;
 }
 
-function TreeNode({ node, depth, onFileSelect, selectedPath, parentPath }: TreeNodeProps) {
-  const [expanded, setExpanded] = useState(depth < 2);
-
-  const fullPath = parentPath ? `${parentPath}/${node.name}` : node.name;
+function TreeNode({ node, depth, onFileSelect, selectedPath, expandedPaths, onToggle }: TreeNodeProps) {
+  const expanded = expandedPaths.has(node.path);
   const isSelected = selectedPath === node.path;
 
   const handleClick = useCallback(() => {
     if (node.is_dir) {
-      setExpanded((e) => !e);
+      onToggle(node.path);
     } else {
       onFileSelect(node.path);
     }
-  }, [node, onFileSelect]);
+  }, [node, onFileSelect, onToggle]);
 
   const getFileIcon = (name: string, isDir: boolean): string => {
     if (isDir) return expanded ? "📂" : "📁";
@@ -83,7 +82,8 @@ function TreeNode({ node, depth, onFileSelect, selectedPath, parentPath }: TreeN
               depth={depth + 1}
               onFileSelect={onFileSelect}
               selectedPath={selectedPath}
-              parentPath={fullPath}
+              expandedPaths={expandedPaths}
+              onToggle={onToggle}
             />
           ))}
         </div>
@@ -98,7 +98,52 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// Collect all directory paths from the tree
+function collectDirPaths(node: FileNode, paths: string[] = []): string[] {
+  if (node.is_dir) {
+    paths.push(node.path);
+    if (node.children) {
+      for (const child of node.children) {
+        collectDirPaths(child, paths);
+      }
+    }
+  }
+  return paths;
+}
+
 export function FileTree({ tree, onFileSelect, selectedPath }: FileTreeProps) {
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+
+  const allDirPaths = useMemo(() => {
+    const paths: string[] = [];
+    if (tree.children) {
+      for (const child of tree.children) {
+        collectDirPaths(child, paths);
+      }
+    }
+    return paths;
+  }, [tree]);
+
+  const handleToggle = useCallback((path: string) => {
+    setExpandedPaths((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleExpandAll = useCallback(() => {
+    setExpandedPaths(new Set(allDirPaths));
+  }, [allDirPaths]);
+
+  const handleCollapseAll = useCallback(() => {
+    setExpandedPaths(new Set());
+  }, []);
+
   if (!tree.children || tree.children.length === 0) {
     return <div className="file-tree empty">No files</div>;
   }
@@ -108,6 +153,14 @@ export function FileTree({ tree, onFileSelect, selectedPath }: FileTreeProps) {
       <div className="tree-header">
         <span className="tree-icon">📦</span>
         <span className="tree-name">{tree.name}</span>
+        <div className="tree-actions">
+          <button className="tree-action-btn" onClick={handleExpandAll} title="Expand All">
+            ⊞
+          </button>
+          <button className="tree-action-btn" onClick={handleCollapseAll} title="Collapse All">
+            ⊟
+          </button>
+        </div>
       </div>
       <div className="tree-content">
         {tree.children.map((child) => (
@@ -117,7 +170,8 @@ export function FileTree({ tree, onFileSelect, selectedPath }: FileTreeProps) {
             depth={0}
             onFileSelect={onFileSelect}
             selectedPath={selectedPath}
-            parentPath=""
+            expandedPaths={expandedPaths}
+            onToggle={handleToggle}
           />
         ))}
       </div>

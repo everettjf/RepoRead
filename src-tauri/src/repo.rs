@@ -328,10 +328,23 @@ pub struct AppSettings {
     pub github_token: Option<String>,
     #[serde(default = "default_true")]
     pub copy_screenshot_to_clipboard: bool,
+    pub openrouter_api_key: Option<String>,
+    #[serde(default = "default_interpret_prompt")]
+    pub interpret_prompt: String,
+    #[serde(default = "default_model")]
+    pub interpret_model: String,
 }
 
 fn default_true() -> bool {
     true
+}
+
+fn default_interpret_prompt() -> String {
+    "This is {language} code from the {project} project. Please interpret the following code in under 500 words:\n\n```{language}\n{code}\n```".to_string()
+}
+
+fn default_model() -> String {
+    "anthropic/claude-sonnet-4".to_string()
 }
 
 impl Default for AppSettings {
@@ -339,6 +352,9 @@ impl Default for AppSettings {
         Self {
             github_token: None,
             copy_screenshot_to_clipboard: true,
+            openrouter_api_key: None,
+            interpret_prompt: default_interpret_prompt(),
+            interpret_model: default_model(),
         }
     }
 }
@@ -909,4 +925,77 @@ pub fn save_screenshot(base64_data: &str, filename: &str, copy_to_clipboard: boo
     }
 
     Ok(file_path.to_string_lossy().to_string())
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct OpenRouterMessage {
+    role: String,
+    content: String,
+}
+
+#[derive(Debug, Serialize)]
+struct OpenRouterRequest {
+    model: String,
+    messages: Vec<OpenRouterMessage>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenRouterChoice {
+    message: OpenRouterMessage,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenRouterResponse {
+    choices: Vec<OpenRouterChoice>,
+}
+
+pub async fn interpret_code(
+    api_key: &str,
+    prompt_template: &str,
+    code: &str,
+    language: &str,
+    project: &str,
+    model: &str,
+) -> Result<String, RepoError> {
+    let prompt = prompt_template
+        .replace("{language}", language)
+        .replace("{project}", project)
+        .replace("{code}", code);
+
+    let request = OpenRouterRequest {
+        model: model.to_string(),
+        messages: vec![OpenRouterMessage {
+            role: "user".to_string(),
+            content: prompt,
+        }],
+    };
+
+    let client = reqwest::Client::new();
+    let response = client
+        .post("https://openrouter.ai/api/v1/chat/completions")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("HTTP-Referer", "https://github.com/anthropics/claude-code")
+        .json(&request)
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(RepoError::InvalidUrl(format!(
+            "OpenRouter API error: HTTP {} - {}",
+            status, body
+        )));
+    }
+
+    let result: OpenRouterResponse = response.json().await?;
+    let text = result
+        .choices
+        .into_iter()
+        .map(|c| c.message.content)
+        .collect::<Vec<_>>()
+        .join("");
+
+    Ok(text)
 }

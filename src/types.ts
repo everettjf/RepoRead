@@ -41,6 +41,9 @@ export interface SearchResultItem {
 export interface AppSettings {
   github_token: string | null;
   copy_screenshot_to_clipboard: boolean;
+  openrouter_api_key: string | null;
+  interpret_prompt: string;
+  interpret_model: string;
 }
 
 export interface TrendingRepo {

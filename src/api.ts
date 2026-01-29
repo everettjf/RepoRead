@@ -89,3 +89,21 @@ export async function getScreenshotsPath(): Promise<string> {
 export async function openScreenshotsFolder(): Promise<void> {
   return invoke<void>("open_screenshots_folder");
 }
+
+export async function interpretCode(
+  apiKey: string,
+  promptTemplate: string,
+  code: string,
+  language: string,
+  project: string,
+  model: string
+): Promise<string> {
+  return invoke<string>("interpret_code", {
+    apiKey,
+    promptTemplate,
+    code,
+    language,
+    project,
+    model,
+  });
+}

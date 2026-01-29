@@ -1,8 +1,9 @@
-import { Suspense, lazy, useState, useMemo, useRef } from "react";
+import { Suspense, lazy, useState, useMemo, useRef, useImperativeHandle, forwardRef } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { FileContent, RepoInfo } from "../types";
 import { ScreenshotOverlay } from "./ScreenshotOverlay";
 import { saveScreenshot } from "../api";
+import type { editor } from "monaco-editor";
 
 const MonacoEditor = lazy(() => import("@monaco-editor/react"));
 
@@ -12,7 +13,13 @@ interface CodeViewerProps {
   isLoading: boolean;
   repoInfo: RepoInfo | null;
   copyScreenshotToClipboard?: boolean;
+  isCapturing?: boolean;
   onScreenshotSaved?: (copiedToClipboard: boolean) => void;
+  onCaptureComplete?: () => void;
+}
+
+export interface CodeViewerHandle {
+  getSelectedText: () => string;
 }
 
 function LoadingSpinner() {
@@ -132,22 +139,34 @@ function BinaryFileView({
   );
 }
 
-export function CodeViewer({
+export const CodeViewer = forwardRef<CodeViewerHandle, CodeViewerProps>(function CodeViewer({
   content,
   filePath,
   isLoading,
   repoInfo,
   copyScreenshotToClipboard = true,
+  isCapturing = false,
   onScreenshotSaved,
-}: CodeViewerProps) {
+  onCaptureComplete,
+}, ref) {
   const [showPreview, setShowPreview] = useState(false);
-  const [isCapturing, setIsCapturing] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   const codeContentRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    getSelectedText: () => {
+      const editorInstance = editorRef.current;
+      if (!editorInstance) return "";
+      const selection = editorInstance.getSelection();
+      if (!selection) return "";
+      const model = editorInstance.getModel();
+      if (!model) return "";
+      return model.getValueInRange(selection);
+    },
+  }));
 
   const handleScreenshotCapture = async (dataUrl: string) => {
-    setIsCapturing(false);
-    setIsSaving(true);
+    onCaptureComplete?.();
 
     try {
       const timestamp = new Date()
@@ -159,13 +178,11 @@ export function CodeViewer({
       onScreenshotSaved?.(copyScreenshotToClipboard);
     } catch (error) {
       console.error("Failed to save screenshot:", error);
-    } finally {
-      setIsSaving(false);
     }
   };
 
   const handleScreenshotCancel = () => {
-    setIsCapturing(false);
+    onCaptureComplete?.();
   };
 
   const isMarkdown =
@@ -241,14 +258,6 @@ export function CodeViewer({
             {showPreview ? "Code" : "Preview"}
           </button>
         )}
-        <button
-          className="screenshot-button"
-          onClick={() => setIsCapturing(true)}
-          disabled={isSaving}
-          title="Take screenshot"
-        >
-          {isSaving ? "..." : "\uD83D\uDCF7"}
-        </button>
         <span className="language-badge">{content.language}</span>
       </div>
       <div className="code-content" ref={codeContentRef}>
@@ -261,6 +270,9 @@ export function CodeViewer({
               language={content.language}
               value={content.content}
               theme="vs-dark"
+              onMount={(editor) => {
+                editorRef.current = editor;
+              }}
               options={{
                 readOnly: true,
                 minimap: { enabled: true },
@@ -297,4 +309,4 @@ export function CodeViewer({
       )}
     </div>
   );
-}
+});

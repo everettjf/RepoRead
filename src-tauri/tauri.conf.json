@@ -35,6 +35,9 @@
       "icons/icon.ico"
     ],
     "category": "DeveloperTool",
-    "shortDescription": "Read GitHub repositories on iPad"
+    "shortDescription": "Read GitHub repositories on iPad",
+    "macOS": {
+      "bundleName": "RepoRead"
+    }
   }
 }

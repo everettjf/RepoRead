@@ -9,6 +9,7 @@ use repo::{
     load_favorites as load_favorites_impl, save_favorites as save_favorites_impl,
     export_favorites as export_favorites_impl,
     get_screenshots_dir as get_screenshots_dir_impl, save_screenshot as save_screenshot_impl,
+    interpret_code as interpret_code_impl,
     FileContent, FileNode, ImportResult, RepoError, RepoInfo, SearchResultItem, AppSettings,
     TrendingRepo, FavoriteRepo,
 };
@@ -157,6 +158,18 @@ fn open_screenshots_folder() -> Result<(), RepoError> {
     )))
 }
 
+#[tauri::command]
+async fn interpret_code(
+    api_key: String,
+    prompt_template: String,
+    code: String,
+    language: String,
+    project: String,
+    model: String,
+) -> Result<String, RepoError> {
+    interpret_code_impl(&api_key, &prompt_template, &code, &language, &project, &model).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -181,6 +194,7 @@ pub fn run() {
             save_screenshot,
             get_screenshots_path,
             open_screenshots_folder,
+            interpret_code,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

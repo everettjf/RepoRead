@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { save } from "@tauri-apps/plugin-dialog";
 import * as Select from "@radix-ui/react-select";
 import { FileTree } from "./components/FileTree";
-import { CodeViewer } from "./components/CodeViewer";
+import { CodeViewer, type CodeViewerHandle } from "./components/CodeViewer";
+import { InterpretModal } from "./components/InterpretModal";
 import { RepoList } from "./components/RepoList";
 import {
   importRepoFromGithub,
@@ -19,6 +20,7 @@ import {
   saveFavorites,
   exportFavorites,
   openScreenshotsFolder,
+  interpretCode,
 } from "./api";
 import type {
   FileNode,
@@ -255,18 +257,31 @@ function SettingsPage({
   exporting: boolean;
 }) {
   const [token, setToken] = useState(settings.github_token || "");
-  const [isSaving, setIsSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [openrouterKey, setOpenrouterKey] = useState(settings.openrouter_api_key || "");
+  const [interpretPrompt, setInterpretPrompt] = useState(settings.interpret_prompt || "");
+  const [interpretModel, setInterpretModel] = useState(settings.interpret_model || "anthropic/claude-sonnet-4");
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
   const [openingScreenshots, setOpeningScreenshots] = useState(false);
 
-  const handleSave = async () => {
-    setIsSaving(true);
+  // Individual save states for each section
+  const [savingGithub, setSavingGithub] = useState(false);
+  const [savedGithub, setSavedGithub] = useState(false);
+  const [savingApiKey, setSavingApiKey] = useState(false);
+  const [savedApiKey, setSavedApiKey] = useState(false);
+  const [savingModel, setSavingModel] = useState(false);
+  const [savedModel, setSavedModel] = useState(false);
+  const [savingPrompt, setSavingPrompt] = useState(false);
+  const [savedPrompt, setSavedPrompt] = useState(false);
+
+  const saveSettings = async (updates: Partial<AppSettings>, setSaving: (v: boolean) => void, setSaved: (v: boolean) => void) => {
+    setSaving(true);
     try {
-      await onSave({ ...settings, github_token: token || null });
+      await onSave({ ...settings, ...updates });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } finally {
-      setIsSaving(false);
+      setSaving(false);
     }
   };
 
@@ -306,10 +321,10 @@ function SettingsPage({
             />
             <button
               className="save-button"
-              onClick={handleSave}
-              disabled={isSaving}
+              onClick={() => saveSettings({ github_token: token || null }, setSavingGithub, setSavedGithub)}
+              disabled={savingGithub}
             >
-              {isSaving ? "Saving..." : saved ? "Saved ✓" : "Save"}
+              {savingGithub ? "Saving..." : savedGithub ? "Saved ✓" : "Save"}
             </button>
           </div>
         </section>
@@ -327,6 +342,114 @@ function SettingsPage({
           <button className="github-link-button" onClick={handleOpenGitHub}>
             Open GitHub Token Page →
           </button>
+        </section>
+
+        <section className="settings-section">
+          <h2>Interpretation</h2>
+          <p className="settings-desc">
+            Set your <a href="https://openrouter.ai/keys" target="_blank" rel="noopener" style={{ color: "var(--accent-color)" }}>OpenRouter API key</a> to enable the Interpret feature.
+          </p>
+
+          <div className="token-input-group" style={{ marginBottom: 16 }}>
+            <input
+              type="password"
+              className="token-input"
+              placeholder="sk-or-v1-xxxxxxxxxxxxxxxxxxxx"
+              value={openrouterKey}
+              onChange={(e) => setOpenrouterKey(e.target.value)}
+            />
+            <button
+              className="save-button"
+              onClick={() => saveSettings({ openrouter_api_key: openrouterKey || null }, setSavingApiKey, setSavedApiKey)}
+              disabled={savingApiKey}
+            >
+              {savingApiKey ? "Saving..." : savedApiKey ? "Saved ✓" : "Save"}
+            </button>
+          </div>
+
+          <p className="settings-desc" style={{ marginTop: 20 }}>
+            Model (e.g. anthropic/claude-sonnet-4, openai/gpt-4o, google/gemini-2.0-flash-001)
+          </p>
+          <div className="token-input-group" style={{ marginBottom: 16 }}>
+            <input
+              type="text"
+              className="token-input"
+              placeholder="anthropic/claude-sonnet-4"
+              value={interpretModel}
+              onChange={(e) => setInterpretModel(e.target.value)}
+            />
+            <button
+              className="save-button"
+              onClick={() => saveSettings({ interpret_model: interpretModel }, setSavingModel, setSavedModel)}
+              disabled={savingModel}
+            >
+              {savingModel ? "Saving..." : savedModel ? "Saved ✓" : "Save"}
+            </button>
+          </div>
+
+          <p className="settings-desc" style={{ marginTop: 20 }}>
+            Customize the prompt template. Use {"{language}"}, {"{project}"}, and {"{code}"} as placeholders.
+          </p>
+          <textarea
+            className="prompt-textarea"
+            value={interpretPrompt}
+            onChange={(e) => setInterpretPrompt(e.target.value)}
+            rows={5}
+          />
+          <button
+            className="save-button"
+            onClick={() => saveSettings({ interpret_prompt: interpretPrompt }, setSavingPrompt, setSavedPrompt)}
+            disabled={savingPrompt}
+            style={{ marginTop: 12 }}
+          >
+            {savingPrompt ? "Saving..." : savedPrompt ? "Saved ✓" : "Save Prompt"}
+          </button>
+
+          <div style={{ marginTop: 20 }}>
+            <button
+              className="github-link-button"
+              onClick={async () => {
+                if (!openrouterKey) {
+                  setTestResult("Please enter an API key first.");
+                  return;
+                }
+                setTesting(true);
+                setTestResult(null);
+                try {
+                  const result = await interpretCode(
+                    openrouterKey,
+                    "Say 'Hello! API is working.' in one short sentence.",
+                    "",
+                    "",
+                    "",
+                    interpretModel
+                  );
+                  setTestResult("✓ " + result);
+                } catch (err) {
+                  setTestResult("✗ " + String(err));
+                } finally {
+                  setTesting(false);
+                }
+              }}
+              disabled={testing}
+            >
+              {testing ? "Testing..." : "Test Connection"}
+            </button>
+            {testResult && (
+              <p style={{
+                marginTop: 12,
+                padding: "10px 14px",
+                background: testResult.startsWith("✓") ? "rgba(78, 201, 176, 0.1)" : "rgba(241, 76, 76, 0.1)",
+                border: `1px solid ${testResult.startsWith("✓") ? "var(--success-color)" : "var(--error-color)"}`,
+                borderRadius: 8,
+                fontSize: 13,
+                color: testResult.startsWith("✓") ? "var(--success-color)" : "var(--error-color)",
+              }}>
+                {testResult}
+              </p>
+            )}
+            <hr style={{ margin: "20px 0", border: "none", borderTop: "1px solid var(--border-color)" }} />
+          </div>
         </section>
 
         <section className="settings-section">
@@ -416,6 +539,9 @@ function App() {
   const [settings, setSettings] = useState<AppSettings>({
     github_token: null,
     copy_screenshot_to_clipboard: true,
+    openrouter_api_key: null,
+    interpret_prompt: "This is {language} code from the {project} project. Please interpret the following code in under 500 words:\n\n```{language}\n{code}\n```",
+    interpret_model: "anthropic/claude-sonnet-4",
   });
 
   // Trending
@@ -457,6 +583,16 @@ function App() {
 
   // Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Screenshot
+  const [isCapturing, setIsCapturing] = useState(false);
+
+  // Interpret
+  const codeViewerRef = useRef<CodeViewerHandle>(null);
+  const [interpretModalOpen, setInterpretModalOpen] = useState(false);
+  const [interpretLoading, setInterpretLoading] = useState(false);
+  const [interpretResult, setInterpretResult] = useState<string | null>(null);
+  const [interpretError, setInterpretError] = useState<string | null>(null);
 
   // Favorites lookup set for quick check
   const favoriteKeys = new Set(favorites.map((f) => `${f.owner}/${f.repo}`));
@@ -672,6 +808,44 @@ function App() {
   const handleSaveSettings = async (newSettings: AppSettings) => {
     await updateSettings(newSettings);
     setSettings(newSettings);
+  };
+
+  const handleInterpret = async () => {
+    if (!settings.openrouter_api_key) {
+      setInterpretError("Please set your OpenRouter API key in Settings first.");
+      setInterpretModalOpen(true);
+      return;
+    }
+
+    const selectedText = codeViewerRef.current?.getSelectedText() || "";
+    if (!selectedText.trim()) {
+      setInterpretError("Please select some code first.");
+      setInterpretModalOpen(true);
+      return;
+    }
+
+    setInterpretResult(null);
+    setInterpretError(null);
+    setInterpretLoading(true);
+    setInterpretModalOpen(true);
+
+    try {
+      const language = fileContent?.language || "unknown";
+      const project = currentRepo ? `${currentRepo.owner}/${currentRepo.repo}` : "unknown";
+      const result = await interpretCode(
+        settings.openrouter_api_key,
+        settings.interpret_prompt,
+        selectedText,
+        language,
+        project,
+        settings.interpret_model
+      );
+      setInterpretResult(result);
+    } catch (err) {
+      setInterpretError(String(err));
+    } finally {
+      setInterpretLoading(false);
+    }
   };
 
   const handleAddFavorite = async (item: TrendingRepo) => {
@@ -992,6 +1166,24 @@ function App() {
           </span>
           <span className="repo-branch">{currentRepo?.branch}</span>
         </div>
+        <div className="repo-header-actions">
+          <button
+            className="toolbar-button"
+            onClick={handleInterpret}
+            disabled={!fileContent || fileContent.is_binary}
+            title="Interpret selected code"
+          >
+            🔍 Interpret
+          </button>
+          <button
+            className="toolbar-button"
+            onClick={() => setIsCapturing(true)}
+            disabled={!fileContent || fileContent.is_binary}
+            title="Take screenshot"
+          >
+            📷 Screenshot
+          </button>
+        </div>
       </header>
 
       <div className="repo-content">
@@ -1007,13 +1199,16 @@ function App() {
 
         <main className="main-content">
           <CodeViewer
+            ref={codeViewerRef}
             content={fileContent}
             filePath={selectedPath}
             isLoading={isLoadingFile}
             repoInfo={currentRepo}
             copyScreenshotToClipboard={settings.copy_screenshot_to_clipboard}
+            isCapturing={isCapturing}
+            onCaptureComplete={() => setIsCapturing(false)}
             onScreenshotSaved={(copied) => setToastMessage(
-              copied ? "Screenshot saved & copied to clipboard" : "Screenshot saved"
+              copied ? "Screenshot saved & copied" : "Screenshot saved"
             )}
           />
         </main>
@@ -1022,6 +1217,18 @@ function App() {
       {toastMessage && (
         <Toast message={toastMessage} onClose={() => setToastMessage(null)} />
       )}
+
+      <InterpretModal
+        isOpen={interpretModalOpen}
+        isLoading={interpretLoading}
+        result={interpretResult}
+        error={interpretError}
+        onClose={() => {
+          setInterpretModalOpen(false);
+          setInterpretResult(null);
+          setInterpretError(null);
+        }}
+      />
     </div>
   );
 }

@@ -10,7 +10,10 @@
       "Bash(bun run build:*)",
       "Bash(bun run tauri:*)",
       "Bash(/bin/rm:*)",
-      "Bash(bun add:*)"
+      "Bash(bun add:*)",
+      "Bash(/usr/bin/sips:*)",
+      "Bash(/usr/bin/iconutil:*)",
+      "Bash(/bin/ls:*)"
     ]
   }
 }

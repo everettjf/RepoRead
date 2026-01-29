@@ -1,6 +1,6 @@
 [package]
 name = "reporead"
-version = "0.1.0"
+version = "0.1.1"
 description = "Read GitHub repositories on iPad. No clone. No setup. Just code."
 authors = ["you"]
 edition = "2021"

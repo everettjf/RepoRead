@@ -61,7 +61,7 @@ bun install
 # Run in development mode
 bun run tauri dev
 
-# Build for production
+# Build for production (outputs .dmg to src-tauri/target/release/bundle/dmg/)
 bun run tauri build
 ```
 
@@ -71,7 +71,7 @@ bun run tauri build
 # Start development server
 bun run tauri dev
 
-# Build production app
+# Build production app (outputs .dmg to src-tauri/target/release/bundle/dmg/)
 bun run tauri build
 
 # Frontend only (without Tauri)
@@ -113,6 +113,10 @@ To enable AI-powered code interpretation:
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=everettjf/RepoRead&type=Date)](https://star-history.com/#everettjf/RepoRead&Date)
 
 ---
 

@@ -12,8 +12,11 @@ use repo::{
     interpret_code as interpret_code_impl,
     get_file_history as get_file_history_impl, add_file_history as add_file_history_impl,
     create_gist as create_gist_impl,
+    get_chat_sessions as get_chat_sessions_impl, get_chat_session as get_chat_session_impl,
+    save_chat_session as save_chat_session_impl, delete_chat_session as delete_chat_session_impl,
+    update_repo_last_opened as update_repo_last_opened_impl,
     FileContent, FileNode, ImportResult, RepoError, RepoInfo, SearchResultItem, AppSettings,
-    TrendingRepo, FavoriteRepo, FileHistoryEntry, CreateGistResult,
+    TrendingRepo, FavoriteRepo, FileHistoryEntry, CreateGistResult, ChatSession, ChatSessionSummary,
 };
 
 #[tauri::command]
@@ -41,13 +44,15 @@ async fn import_repo_from_github(url: String) -> Result<ImportResult, RepoError>
     let tree = build_file_tree(&repo_dir, &parsed.repo)?;
 
     // Create repo info
+    let now = chrono::Utc::now().to_rfc3339();
     let info = RepoInfo {
         key: repo_key.clone(),
         owner: parsed.owner,
         repo: parsed.repo,
         branch,
-        imported_at: chrono::Utc::now().to_rfc3339(),
+        imported_at: now.clone(),
         url,
+        last_opened_at: Some(now),
     };
 
     // Save metadata
@@ -193,6 +198,31 @@ async fn create_gist(
     create_gist_impl(&token, &filename, &content, &description, public).await
 }
 
+#[tauri::command]
+fn get_chat_sessions(repo_url: String) -> Vec<ChatSessionSummary> {
+    get_chat_sessions_impl(&repo_url)
+}
+
+#[tauri::command]
+fn get_chat_session(repo_url: String, session_id: String) -> Option<ChatSession> {
+    get_chat_session_impl(&repo_url, &session_id)
+}
+
+#[tauri::command]
+fn save_chat_session(repo_url: String, session: ChatSession) -> Result<(), RepoError> {
+    save_chat_session_impl(&repo_url, session)
+}
+
+#[tauri::command]
+fn delete_chat_session(repo_url: String, session_id: String) -> Result<(), RepoError> {
+    delete_chat_session_impl(&repo_url, &session_id)
+}
+
+#[tauri::command]
+fn update_repo_last_opened(repo_key: String) -> Result<(), RepoError> {
+    update_repo_last_opened_impl(&repo_key)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -221,6 +251,11 @@ pub fn run() {
             get_file_history,
             add_file_history,
             create_gist,
+            get_chat_sessions,
+            get_chat_session,
+            save_chat_session,
+            delete_chat_session,
+            update_repo_last_opened,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

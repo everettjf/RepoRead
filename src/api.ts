@@ -10,6 +10,8 @@ import type {
   FavoriteRepo,
   FileHistoryEntry,
   CreateGistResult,
+  ChatSession,
+  ChatSessionSummary,
 } from "./types";
 
 export async function importRepoFromGithub(url: string): Promise<ImportResult> {
@@ -132,4 +134,24 @@ export async function createGist(
     description,
     public: isPublic,
   });
+}
+
+export async function getChatSessions(repoUrl: string): Promise<ChatSessionSummary[]> {
+  return invoke<ChatSessionSummary[]>("get_chat_sessions", { repoUrl });
+}
+
+export async function getChatSession(repoUrl: string, sessionId: string): Promise<ChatSession | null> {
+  return invoke<ChatSession | null>("get_chat_session", { repoUrl, sessionId });
+}
+
+export async function saveChatSession(repoUrl: string, session: ChatSession): Promise<void> {
+  return invoke<void>("save_chat_session", { repoUrl, session });
+}
+
+export async function deleteChatSession(repoUrl: string, sessionId: string): Promise<void> {
+  return invoke<void>("delete_chat_session", { repoUrl, sessionId });
+}
+
+export async function updateRepoLastOpened(repoKey: string): Promise<void> {
+  return invoke<void>("update_repo_last_opened", { repoKey });
 }

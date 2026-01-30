@@ -16,10 +16,22 @@ interface ContextMenuState {
   repoKey: string;
 }
 
-function formatDate(isoString: string): string {
+function formatRelativeTime(isoString: string): string {
   const date = new Date(isoString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffSecs = Math.floor(diffMs / 1000);
+  const diffMins = Math.floor(diffSecs / 60);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffSecs < 60) return "Just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
+
   return date.toLocaleDateString(undefined, {
-    year: "numeric",
     month: "short",
     day: "numeric",
   });
@@ -92,7 +104,9 @@ export function RepoList({ repos, onSelect, onDelete }: RepoListProps) {
                 {repo.owner}/{repo.repo}
               </span>
               <span className="repo-branch">{repo.branch}</span>
-              <span className="repo-date">{formatDate(repo.imported_at)}</span>
+              <span className="repo-date">
+                {formatRelativeTime(repo.last_opened_at || repo.imported_at)}
+              </span>
             </div>
             <button
               className="repo-delete"

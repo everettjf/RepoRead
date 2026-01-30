@@ -49,6 +49,8 @@ pub struct RepoInfo {
     pub branch: String,
     pub imported_at: String,
     pub url: String,
+    #[serde(default)]
+    pub last_opened_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -927,6 +929,8 @@ pub fn load_tree(repo_dir: &Path) -> Result<FileNode, RepoError> {
     Ok(tree)
 }
 
+const MAX_RECENT_REPOS: usize = 100;
+
 pub fn list_repos() -> Result<Vec<RepoInfo>, RepoError> {
     let repos_dir = get_repos_dir();
 
@@ -947,10 +951,31 @@ pub fn list_repos() -> Result<Vec<RepoInfo>, RepoError> {
         }
     }
 
-    // Sort by imported_at descending
-    repos.sort_by(|a, b| b.imported_at.cmp(&a.imported_at));
+    // Sort by last_opened_at (or imported_at as fallback) descending
+    repos.sort_by(|a, b| {
+        let a_time = a.last_opened_at.as_ref().unwrap_or(&a.imported_at);
+        let b_time = b.last_opened_at.as_ref().unwrap_or(&b.imported_at);
+        b_time.cmp(a_time)
+    });
+
+    // Limit to MAX_RECENT_REPOS
+    repos.truncate(MAX_RECENT_REPOS);
 
     Ok(repos)
+}
+
+pub fn update_repo_last_opened(repo_key: &str) -> Result<(), RepoError> {
+    let repo_dir = get_repos_dir().join(repo_key);
+
+    if !repo_dir.exists() {
+        return Err(RepoError::RepoNotFound(repo_key.to_string()));
+    }
+
+    let mut info = load_repo_info(&repo_dir)?;
+    info.last_opened_at = Some(chrono::Utc::now().to_rfc3339());
+    save_repo_info(&repo_dir, &info)?;
+
+    Ok(())
 }
 
 pub fn delete_repo(repo_key: &str) -> Result<(), RepoError> {
@@ -1157,4 +1182,131 @@ pub async fn create_gist(
         html_url: result.html_url,
         id: result.id,
     })
+}
+
+// Chat History
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSession {
+    pub id: String,
+    pub title: String,
+    pub file_path: String,
+    pub messages: Vec<ChatMessage>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSessionSummary {
+    pub id: String,
+    pub title: String,
+    pub file_path: String,
+    pub message_count: usize,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RepoChatHistory {
+    repo_url: String,
+    sessions: Vec<ChatSession>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct AllChatHistory {
+    repos: Vec<RepoChatHistory>,
+}
+
+fn get_chat_history_path() -> PathBuf {
+    directories::ProjectDirs::from("com", "xnu", "RepoRead")
+        .map(|dirs| dirs.config_dir().to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("./config"))
+        .join("chat_history.json")
+}
+
+fn load_all_chat_history() -> AllChatHistory {
+    let path = get_chat_history_path();
+    if let Ok(content) = fs::read_to_string(&path) {
+        serde_json::from_str(&content).unwrap_or_default()
+    } else {
+        AllChatHistory::default()
+    }
+}
+
+fn save_all_chat_history(history: &AllChatHistory) -> Result<(), RepoError> {
+    let path = get_chat_history_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let json = serde_json::to_string_pretty(history)?;
+    fs::write(path, json)?;
+    Ok(())
+}
+
+const MAX_CHAT_SESSIONS: usize = 50;
+
+pub fn get_chat_sessions(repo_url: &str) -> Vec<ChatSessionSummary> {
+    let all = load_all_chat_history();
+    all.repos
+        .iter()
+        .find(|r| r.repo_url == repo_url)
+        .map(|r| {
+            r.sessions
+                .iter()
+                .map(|s| ChatSessionSummary {
+                    id: s.id.clone(),
+                    title: s.title.clone(),
+                    file_path: s.file_path.clone(),
+                    message_count: s.messages.len(),
+                    created_at: s.created_at.clone(),
+                    updated_at: s.updated_at.clone(),
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+pub fn get_chat_session(repo_url: &str, session_id: &str) -> Option<ChatSession> {
+    let all = load_all_chat_history();
+    all.repos
+        .iter()
+        .find(|r| r.repo_url == repo_url)
+        .and_then(|r| r.sessions.iter().find(|s| s.id == session_id).cloned())
+}
+
+pub fn save_chat_session(repo_url: &str, session: ChatSession) -> Result<(), RepoError> {
+    let mut all = load_all_chat_history();
+
+    if let Some(repo_history) = all.repos.iter_mut().find(|r| r.repo_url == repo_url) {
+        // Update existing session or add new one
+        if let Some(existing) = repo_history.sessions.iter_mut().find(|s| s.id == session.id) {
+            *existing = session;
+        } else {
+            repo_history.sessions.insert(0, session);
+            repo_history.sessions.truncate(MAX_CHAT_SESSIONS);
+        }
+    } else {
+        all.repos.push(RepoChatHistory {
+            repo_url: repo_url.to_string(),
+            sessions: vec![session],
+        });
+    }
+
+    save_all_chat_history(&all)
+}
+
+pub fn delete_chat_session(repo_url: &str, session_id: &str) -> Result<(), RepoError> {
+    let mut all = load_all_chat_history();
+
+    if let Some(repo_history) = all.repos.iter_mut().find(|r| r.repo_url == repo_url) {
+        repo_history.sessions.retain(|s| s.id != session_id);
+    }
+
+    save_all_chat_history(&all)
 }

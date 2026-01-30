@@ -13,6 +13,7 @@ export interface RepoInfo {
   branch: string;
   imported_at: string;
   url: string;
+  last_opened_at?: string;
 }
 
 export interface ImportResult {
@@ -82,4 +83,27 @@ export interface CreateGistResult {
   url: string;
   html_url: string;
   id: string;
+}
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  file_path: string;
+  messages: ChatMessage[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChatSessionSummary {
+  id: string;
+  title: string;
+  file_path: string;
+  message_count: number;
+  created_at: string;
+  updated_at: string;
 }

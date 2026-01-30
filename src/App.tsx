@@ -9,6 +9,7 @@ import { RepoList } from "./components/RepoList";
 import { FileSearch } from "./components/FileSearch";
 import { FileHistory } from "./components/FileHistory";
 import { ChatSidebar } from "./components/ChatSidebar";
+import { ResizableSidebar } from "./components/ResizableSidebar";
 import {
   importRepoFromGithub,
   readTextFile,
@@ -27,6 +28,7 @@ import {
   getFileHistory,
   addFileHistory,
   createGist,
+  updateRepoLastOpened,
 } from "./api";
 import type {
   FileNode,
@@ -804,6 +806,9 @@ function App() {
       setView("repo");
       setSelectedPath("");
       setFileContent(null);
+      // Update last opened time and refresh list
+      await updateRepoLastOpened(repo.key);
+      await loadRecentRepos();
     } catch (err) {
       setError(String(err));
     }
@@ -1309,7 +1314,7 @@ function App() {
       </header>
 
       <div className="repo-content">
-        <aside className="sidebar">
+        <ResizableSidebar>
           {tree && (
             <FileTree
               tree={tree}
@@ -1317,7 +1322,7 @@ function App() {
               selectedPath={selectedPath}
             />
           )}
-        </aside>
+        </ResizableSidebar>
 
         <main className="main-content">
           <CodeViewer

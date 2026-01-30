@@ -16,7 +16,8 @@
       "Bash(/bin/ls:*)",
       "Bash(bun run tsc:*)",
       "Bash(chmod:*)",
-      "Bash(/bin/cat package.json)"
+      "Bash(/bin/cat package.json)",
+      "Bash(cargo build:*)"
     ]
   }
 }

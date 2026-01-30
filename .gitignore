@@ -32,3 +32,4 @@ src-tauri/gen/
 *.app
 *.exe
 *.msi
+*.pkg

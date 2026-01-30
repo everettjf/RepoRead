@@ -15,7 +15,8 @@
       "Bash(/usr/bin/iconutil:*)",
       "Bash(/bin/ls:*)",
       "Bash(bun run tsc:*)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(/bin/cat package.json)"
     ]
   }
 }

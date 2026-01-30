@@ -8,6 +8,7 @@ import { InterpretModal } from "./components/InterpretModal";
 import { RepoList } from "./components/RepoList";
 import { FileSearch } from "./components/FileSearch";
 import { FileHistory } from "./components/FileHistory";
+import { ChatSidebar } from "./components/ChatSidebar";
 import {
   importRepoFromGithub,
   readTextFile,
@@ -608,6 +609,10 @@ function App() {
 
   // Create Gist
   const [creatingGist, setCreatingGist] = useState(false);
+
+  // Chat Sidebar
+  const [chatOpen, setChatOpen] = useState(false);
+  const [selectedText, setSelectedText] = useState("");
 
   // Favorites lookup set for quick check
   const favoriteKeys = new Set(favorites.map((f) => `${f.owner}/${f.repo}`));
@@ -1290,6 +1295,16 @@ function App() {
           >
             📷 Screenshot
           </button>
+          <button
+            className="toolbar-button chat-toggle-btn"
+            onClick={() => {
+              setSelectedText(codeViewerRef.current?.getSelectedText() || "");
+              setChatOpen(!chatOpen);
+            }}
+            title="Chat about this code"
+          >
+            💬 Chat
+          </button>
         </div>
       </header>
 
@@ -1342,6 +1357,17 @@ function App() {
         onClose={() => setFileSearchOpen(false)}
         tree={tree}
         onFileSelect={handleFileSelect}
+      />
+
+      <ChatSidebar
+        isOpen={chatOpen}
+        onClose={() => setChatOpen(false)}
+        filePath={selectedPath}
+        fileContent={fileContent}
+        repoInfo={currentRepo}
+        selectedText={selectedText}
+        apiKey={settings.openrouter_api_key}
+        model={settings.interpret_model}
       />
     </div>
   );

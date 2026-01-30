@@ -34,15 +34,16 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "category": "DeveloperTool",
     "shortDescription": "Read GitHub repositories on iPad",
     "macOS": {
-      "bundleName": "RepoRead",
-      "entitlements": "Entitlements.plist",
-      "infoPlist": "Info.plist",
-      "signingIdentity": "3rd Party Mac Developer Application",
-      "provisioningProfile": "app.provisionprofile"
+      "signingIdentity": "3rd Party Mac Developer Application: Feng Zhu (YPV49M8592)",
+      "files": {
+        "embedded.provisionprofile": "./app.provisionprofile"
+      },
+      "entitlements": "./Entitlements.plist",
+      "minimumSystemVersion": "15.0"
     },
+    "category": "Utility",
     "iOS": {
       "infoPlist": "Info.iOS.plist"
     }

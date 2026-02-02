@@ -1338,6 +1338,22 @@ function App() {
           {renderHomeContent()}
         </main>
 
+        <footer className="home-footer">
+          <button
+            className="home-footer-link"
+            onClick={() => openUrl("https://xnu.app/reporead")}
+          >
+            Official Website
+          </button>
+          <span className="home-footer-sep">•</span>
+          <button
+            className="home-footer-link"
+            onClick={() => openUrl("https://xnu.app")}
+          >
+            More Apps
+          </button>
+        </footer>
+
         {toastMessage && (
           <Toast message={toastMessage} onClose={() => setToastMessage(null)} />
         )}

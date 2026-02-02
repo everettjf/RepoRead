@@ -22,6 +22,9 @@ sed -i '' "s/^version = \"$CURRENT_VERSION\"/version = \"$NEW_VERSION\"/" src-ta
 sed -i '' "s/\"version\": \"$CURRENT_VERSION\"/\"version\": \"$NEW_VERSION\"/" src-tauri/tauri.conf.json
 
 # Add tag to git
+git add .
+git commit -m "new version: $NEW_VERSION"
+git push
 git tag $NEW_VERSION
 git push --tags
 

@@ -620,6 +620,7 @@ function App() {
   // Chat Sidebar
   const [chatOpen, setChatOpen] = useState(false);
   const [selectedText, setSelectedText] = useState("");
+  const [chatPinned, setChatPinned] = useState(false);
 
   // Favorites lookup set for quick check
   const favoriteKeys = new Set(favorites.map((f) => `${f.owner}/${f.repo}`));
@@ -1395,6 +1396,21 @@ function App() {
             )}
           />
         </main>
+
+        {chatOpen && chatPinned && (
+          <ChatSidebar
+            isOpen={chatOpen}
+            onClose={() => setChatOpen(false)}
+            pinned
+            onTogglePin={() => setChatPinned(false)}
+            filePath={selectedPath}
+            fileContent={fileContent}
+            repoInfo={currentRepo}
+            selectedText={selectedText}
+            apiKey={settings.openrouter_api_key}
+            model={settings.interpret_model}
+          />
+        )}
       </div>
 
       {toastMessage && (
@@ -1421,8 +1437,13 @@ function App() {
       />
 
       <ChatSidebar
-        isOpen={chatOpen}
+        isOpen={chatOpen && !chatPinned}
         onClose={() => setChatOpen(false)}
+        pinned={false}
+        onTogglePin={() => {
+          setChatPinned(true);
+          setChatOpen(true);
+        }}
         filePath={selectedPath}
         fileContent={fileContent}
         repoInfo={currentRepo}

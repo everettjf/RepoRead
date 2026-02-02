@@ -9,6 +9,8 @@ import { interpretCode, getChatSessions, getChatSession, saveChatSession, delete
 interface ChatSidebarProps {
   isOpen: boolean;
   onClose: () => void;
+  pinned?: boolean;
+  onTogglePin?: () => void;
   filePath: string;
   fileContent: FileContent | null;
   repoInfo: RepoInfo | null;
@@ -81,6 +83,8 @@ type ViewMode = "chat" | "history";
 export function ChatSidebar({
   isOpen,
   onClose,
+  pinned = false,
+  onTogglePin,
   filePath,
   fileContent,
   repoInfo,
@@ -340,245 +344,276 @@ Please respond concisely and helpfully. If discussing code, be specific and refe
     { id: "usage", label: "How to use this?", description: "Usage examples and patterns" },
   ];
 
-  return (
-    <Tooltip.Provider delayDuration={300}>
-      <Dialog.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="chat-overlay" />
-          <Dialog.Content className="chat-sidebar" onOpenAutoFocus={(e) => e.preventDefault()}>
-            <div className="chat-header">
-              <Dialog.Title className="chat-title">
-                {viewMode === "history" ? "History" : "Chat"}
-              </Dialog.Title>
-              <div className="chat-header-actions">
-                {viewMode === "chat" && messages.length > 0 && (
-                  <Tooltip.Root>
-                    <Tooltip.Trigger asChild>
-                      <button
-                        className="chat-icon-btn"
-                        onClick={handleNewChat}
-                        aria-label="New chat"
-                      >
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                          <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                        </svg>
-                      </button>
-                    </Tooltip.Trigger>
-                    <Tooltip.Portal>
-                      <Tooltip.Content className="TooltipContent" sideOffset={5}>
-                        New chat
-                        <Tooltip.Arrow className="TooltipArrow" />
-                      </Tooltip.Content>
-                    </Tooltip.Portal>
-                  </Tooltip.Root>
-                )}
-                <Tooltip.Root>
-                  <Tooltip.Trigger asChild>
-                    <button
-                      className={`chat-icon-btn ${viewMode === "history" ? "active" : ""}`}
-                      onClick={() => setViewMode(viewMode === "history" ? "chat" : "history")}
-                      aria-label="History"
-                    >
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                        <path d="M8 4v4l3 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                        <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" fill="none"/>
-                      </svg>
-                    </button>
-                  </Tooltip.Trigger>
-                  <Tooltip.Portal>
-                    <Tooltip.Content className="TooltipContent" sideOffset={5}>
-                      {viewMode === "history" ? "Back to chat" : "Chat history"}
-                      <Tooltip.Arrow className="TooltipArrow" />
-                    </Tooltip.Content>
-                  </Tooltip.Portal>
-                </Tooltip.Root>
-                <Dialog.Close asChild>
-                  <button className="chat-icon-btn" aria-label="Close">
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                      <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                    </svg>
-                  </button>
-                </Dialog.Close>
-              </div>
-            </div>
+  const content = (
+    <div className="chat-panel">
+      <div className="chat-header">
+        <div className="chat-header-left">
+          <Tooltip.Root>
+            <Tooltip.Trigger asChild>
+              <button
+                className={`chat-icon-btn ${pinned ? "active" : ""}`}
+                onClick={onTogglePin}
+                disabled={!onTogglePin}
+                aria-label={pinned ? "Unpin chat" : "Pin chat"}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M5 3h6l-1 4 2 2v2H4V9l2-2-1-4z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
+                  <path d="M8 11v2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+                </svg>
+              </button>
+            </Tooltip.Trigger>
+            <Tooltip.Portal>
+              <Tooltip.Content className="TooltipContent" sideOffset={5}>
+                {pinned ? "Unpin" : "Pin to right"}
+                <Tooltip.Arrow className="TooltipArrow" />
+              </Tooltip.Content>
+            </Tooltip.Portal>
+          </Tooltip.Root>
+          <div className="chat-title">
+            {viewMode === "history" ? "History" : "Chat"}
+          </div>
+        </div>
+        <div className="chat-header-actions">
+          {viewMode === "chat" && messages.length > 0 && (
+            <Tooltip.Root>
+              <Tooltip.Trigger asChild>
+                <button
+                  className="chat-icon-btn"
+                  onClick={handleNewChat}
+                  aria-label="New chat"
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                </button>
+              </Tooltip.Trigger>
+              <Tooltip.Portal>
+                <Tooltip.Content className="TooltipContent" sideOffset={5}>
+                  New chat
+                  <Tooltip.Arrow className="TooltipArrow" />
+                </Tooltip.Content>
+              </Tooltip.Portal>
+            </Tooltip.Root>
+          )}
+          <Tooltip.Root>
+            <Tooltip.Trigger asChild>
+              <button
+                className={`chat-icon-btn ${viewMode === "history" ? "active" : ""}`}
+                onClick={() => setViewMode(viewMode === "history" ? "chat" : "history")}
+                aria-label="History"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 4v4l3 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" fill="none"/>
+                </svg>
+              </button>
+            </Tooltip.Trigger>
+            <Tooltip.Portal>
+              <Tooltip.Content className="TooltipContent" sideOffset={5}>
+                {viewMode === "history" ? "Back to chat" : "Chat history"}
+                <Tooltip.Arrow className="TooltipArrow" />
+              </Tooltip.Content>
+            </Tooltip.Portal>
+          </Tooltip.Root>
+          <button className="chat-icon-btn" onClick={onClose} aria-label="Close">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>
 
-            {viewMode === "chat" && hasFile && (
-              <>
-                <div className="chat-context">
-                  <span className="chat-context-file" title={filePath}>
-                    {getFileName(filePath)}
-                  </span>
-                  {contextLabel && (
-                    <span className="chat-context-info">{contextLabel}</span>
-                  )}
-                </div>
-                <Separator.Root className="chat-separator" />
-              </>
+      {viewMode === "chat" && hasFile && (
+        <>
+          <div className="chat-context">
+            <span className="chat-context-file" title={filePath}>
+              {getFileName(filePath)}
+            </span>
+            {contextLabel && (
+              <span className="chat-context-info">{contextLabel}</span>
             )}
+          </div>
+          <Separator.Root className="chat-separator" />
+        </>
+      )}
 
-            {viewMode === "history" ? (
-              <ScrollArea.Root className="chat-scroll-root">
-                <ScrollArea.Viewport className="chat-scroll-viewport">
-                  <div className="chat-history-list">
-                    {sessions.length === 0 ? (
-                      <div className="chat-empty-state">
-                        <p>No chat history yet.</p>
+      {viewMode === "history" ? (
+        <ScrollArea.Root className="chat-scroll-root">
+          <ScrollArea.Viewport className="chat-scroll-viewport">
+            <div className="chat-history-list">
+              {sessions.length === 0 ? (
+                <div className="chat-empty-state">
+                  <p>No chat history yet.</p>
+                </div>
+              ) : (
+                sessions.map((session) => (
+                  <div
+                    key={session.id}
+                    className={`chat-history-item ${currentSessionId === session.id ? "active" : ""}`}
+                    onClick={() => handleLoadSession(session.id)}
+                  >
+                    <div className="chat-history-item-content">
+                      <div className="chat-history-item-title">{session.title}</div>
+                      <div className="chat-history-item-meta">
+                        <span>{getFileName(session.file_path)}</span>
+                        <span>{session.message_count} messages</span>
+                        <span>{formatTime(session.updated_at)}</span>
                       </div>
-                    ) : (
-                      sessions.map((session) => (
-                        <div
-                          key={session.id}
-                          className={`chat-history-item ${currentSessionId === session.id ? "active" : ""}`}
-                          onClick={() => handleLoadSession(session.id)}
+                    </div>
+                    <Tooltip.Root>
+                      <Tooltip.Trigger asChild>
+                        <button
+                          className="chat-history-item-delete"
+                          onClick={(e) => handleDeleteSession(session.id, e)}
+                          aria-label="Delete"
                         >
-                          <div className="chat-history-item-content">
-                            <div className="chat-history-item-title">{session.title}</div>
-                            <div className="chat-history-item-meta">
-                              <span>{getFileName(session.file_path)}</span>
-                              <span>{session.message_count} messages</span>
-                              <span>{formatTime(session.updated_at)}</span>
-                            </div>
-                          </div>
-                          <Tooltip.Root>
-                            <Tooltip.Trigger asChild>
-                              <button
-                                className="chat-history-item-delete"
-                                onClick={(e) => handleDeleteSession(session.id, e)}
-                                aria-label="Delete"
-                              >
-                                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                                  <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                                </svg>
-                              </button>
-                            </Tooltip.Trigger>
-                            <Tooltip.Portal>
-                              <Tooltip.Content className="TooltipContent" sideOffset={5}>
-                                Delete
-                                <Tooltip.Arrow className="TooltipArrow" />
-                              </Tooltip.Content>
-                            </Tooltip.Portal>
-                          </Tooltip.Root>
-                        </div>
-                      ))
+                          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                            <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                          </svg>
+                        </button>
+                      </Tooltip.Trigger>
+                      <Tooltip.Portal>
+                        <Tooltip.Content className="TooltipContent" sideOffset={5}>
+                          Delete
+                          <Tooltip.Arrow className="TooltipArrow" />
+                        </Tooltip.Content>
+                      </Tooltip.Portal>
+                    </Tooltip.Root>
+                  </div>
+                ))
+              )}
+            </div>
+          </ScrollArea.Viewport>
+          <ScrollArea.Scrollbar className="chat-scrollbar" orientation="vertical">
+            <ScrollArea.Thumb className="chat-scrollbar-thumb" />
+          </ScrollArea.Scrollbar>
+        </ScrollArea.Root>
+      ) : (
+        <>
+          <ScrollArea.Root className="chat-scroll-root">
+            <ScrollArea.Viewport className="chat-scroll-viewport">
+              <div className="chat-messages">
+                {showQuickActions && hasFile && (
+                  <div className="chat-quick-actions">
+                    <p className="chat-quick-title">Quick actions</p>
+                    {quickActions.map((action) => (
+                      <Tooltip.Root key={action.id}>
+                        <Tooltip.Trigger asChild>
+                          <button
+                            className="chat-quick-btn"
+                            onClick={() => handleQuickAction(action.id)}
+                            disabled={isLoading}
+                          >
+                            {action.label}
+                          </button>
+                        </Tooltip.Trigger>
+                        <Tooltip.Portal>
+                          <Tooltip.Content className="TooltipContent" side="left" sideOffset={8}>
+                            {action.description}
+                            <Tooltip.Arrow className="TooltipArrow" />
+                          </Tooltip.Content>
+                        </Tooltip.Portal>
+                      </Tooltip.Root>
+                    ))}
+                  </div>
+                )}
+
+                {showQuickActions && !hasFile && (
+                  <div className="chat-empty-state">
+                    <p>Select a file to start chatting about it.</p>
+                  </div>
+                )}
+
+                {messages.map((msg, idx) => (
+                  <div key={idx} className={`chat-message chat-message-${msg.role}`}>
+                    <div className="chat-message-role">
+                      {msg.role === "user" ? "You" : "AI"}
+                    </div>
+                    {msg.role === "assistant" ? (
+                      <div
+                        className="chat-message-content markdown-preview"
+                        dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
+                      />
+                    ) : (
+                      <div className="chat-message-content">{msg.content}</div>
                     )}
                   </div>
-                </ScrollArea.Viewport>
-                <ScrollArea.Scrollbar className="chat-scrollbar" orientation="vertical">
-                  <ScrollArea.Thumb className="chat-scrollbar-thumb" />
-                </ScrollArea.Scrollbar>
-              </ScrollArea.Root>
-            ) : (
-              <>
-                <ScrollArea.Root className="chat-scroll-root">
-                  <ScrollArea.Viewport className="chat-scroll-viewport">
-                    <div className="chat-messages">
-                      {showQuickActions && hasFile && (
-                        <div className="chat-quick-actions">
-                          <p className="chat-quick-title">Quick actions</p>
-                          {quickActions.map((action) => (
-                            <Tooltip.Root key={action.id}>
-                              <Tooltip.Trigger asChild>
-                                <button
-                                  className="chat-quick-btn"
-                                  onClick={() => handleQuickAction(action.id)}
-                                  disabled={isLoading}
-                                >
-                                  {action.label}
-                                </button>
-                              </Tooltip.Trigger>
-                              <Tooltip.Portal>
-                                <Tooltip.Content className="TooltipContent" side="left" sideOffset={8}>
-                                  {action.description}
-                                  <Tooltip.Arrow className="TooltipArrow" />
-                                </Tooltip.Content>
-                              </Tooltip.Portal>
-                            </Tooltip.Root>
-                          ))}
-                        </div>
-                      )}
+                ))}
 
-                      {showQuickActions && !hasFile && (
-                        <div className="chat-empty-state">
-                          <p>Select a file to start chatting about it.</p>
-                        </div>
-                      )}
-
-                      {messages.map((msg, idx) => (
-                        <div key={idx} className={`chat-message chat-message-${msg.role}`}>
-                          <div className="chat-message-role">
-                            {msg.role === "user" ? "You" : "AI"}
-                          </div>
-                          {msg.role === "assistant" ? (
-                            <div
-                              className="chat-message-content markdown-preview"
-                              dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
-                            />
-                          ) : (
-                            <div className="chat-message-content">{msg.content}</div>
-                          )}
-                        </div>
-                      ))}
-
-                      {isLoading && (
-                        <div className="chat-message chat-message-assistant">
-                          <div className="chat-message-role">AI</div>
-                          <div className="chat-message-content chat-loading">
-                            <span className="chat-typing-indicator">
-                              <span></span>
-                              <span></span>
-                              <span></span>
-                            </span>
-                          </div>
-                        </div>
-                      )}
-
-                      <div ref={messagesEndRef} />
+                {isLoading && (
+                  <div className="chat-message chat-message-assistant">
+                    <div className="chat-message-role">AI</div>
+                    <div className="chat-message-content chat-loading">
+                      <span className="chat-typing-indicator">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                      </span>
                     </div>
-                  </ScrollArea.Viewport>
-                  <ScrollArea.Scrollbar className="chat-scrollbar" orientation="vertical">
-                    <ScrollArea.Thumb className="chat-scrollbar-thumb" />
-                  </ScrollArea.Scrollbar>
-                </ScrollArea.Root>
+                  </div>
+                )}
 
-                <Separator.Root className="chat-separator" />
+                <div ref={messagesEndRef} />
+              </div>
+            </ScrollArea.Viewport>
+            <ScrollArea.Scrollbar className="chat-scrollbar" orientation="vertical">
+              <ScrollArea.Thumb className="chat-scrollbar-thumb" />
+            </ScrollArea.Scrollbar>
+          </ScrollArea.Root>
 
-                <form className="chat-input-form" onSubmit={handleSubmit}>
-                  <textarea
-                    ref={inputRef}
-                    className="chat-input"
-                    placeholder={hasFile ? "Ask about this code..." : "Select a file first..."}
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    disabled={!hasFile || isLoading}
-                    rows={1}
-                  />
-                  <Tooltip.Root>
-                    <Tooltip.Trigger asChild>
-                      <button
-                        type="submit"
-                        className="chat-send-btn"
-                        disabled={!hasFile || !input.trim() || isLoading}
-                        aria-label="Send message"
-                      >
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                          <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      </button>
-                    </Tooltip.Trigger>
-                    <Tooltip.Portal>
-                      <Tooltip.Content className="TooltipContent" sideOffset={5}>
-                        Send (Enter)
-                        <Tooltip.Arrow className="TooltipArrow" />
-                      </Tooltip.Content>
-                    </Tooltip.Portal>
-                  </Tooltip.Root>
-                </form>
-              </>
-            )}
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+          <Separator.Root className="chat-separator" />
+
+          <form className="chat-input-form" onSubmit={handleSubmit}>
+            <textarea
+              ref={inputRef}
+              className="chat-input"
+              placeholder={hasFile ? "Ask about this code..." : "Select a file first..."}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={!hasFile || isLoading}
+              rows={1}
+            />
+            <Tooltip.Root>
+              <Tooltip.Trigger asChild>
+                <button
+                  type="submit"
+                  className="chat-send-btn"
+                  disabled={!hasFile || !input.trim() || isLoading}
+                  aria-label="Send message"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+              </Tooltip.Trigger>
+              <Tooltip.Portal>
+                <Tooltip.Content className="TooltipContent" sideOffset={5}>
+                  Send (Enter)
+                  <Tooltip.Arrow className="TooltipArrow" />
+                </Tooltip.Content>
+              </Tooltip.Portal>
+            </Tooltip.Root>
+          </form>
+        </>
+      )}
+    </div>
+  );
+
+  return (
+    <Tooltip.Provider delayDuration={300}>
+      {pinned ? (
+        isOpen ? <div className="chat-sidebar pinned">{content}</div> : null
+      ) : (
+        <Dialog.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
+          <Dialog.Portal>
+            <Dialog.Overlay className="chat-overlay" />
+            <Dialog.Content className="chat-sidebar" onOpenAutoFocus={(e) => e.preventDefault()}>
+              {content}
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
+      )}
     </Tooltip.Provider>
   );
 }

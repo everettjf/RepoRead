@@ -1943,6 +1943,21 @@ body {
   outline: none;
 }
 
+.chat-sidebar.pinned {
+  position: relative;
+  width: 360px;
+  height: 100%;
+  z-index: auto;
+  animation: none;
+  box-shadow: none;
+}
+
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
 @keyframes slideInRight {
   from {
     transform: translateX(100%);
@@ -1967,6 +1982,12 @@ body {
   font-weight: 600;
   color: var(--text-primary);
   margin: 0;
+}
+
+.chat-header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .chat-header-actions {

@@ -1,0 +1,240 @@
+.content-search-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 15vh;
+  z-index: 10000;
+  animation: fadeIn 0.1s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.content-search-modal {
+  width: 100%;
+  max-width: 720px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  animation: slideDown 0.15s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.content-search-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.content-search-icon {
+  font-size: 18px;
+  opacity: 0.6;
+}
+
+.content-search-input {
+  flex: 1;
+  padding: 0;
+  font-size: 16px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  outline: none;
+}
+
+.content-search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.content-search-shortcut {
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-muted);
+}
+
+.content-search-stop {
+  padding: 6px 10px;
+  font-size: 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.content-search-stop:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--accent-color);
+}
+
+.content-search-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.content-search-clear:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--accent-color);
+}
+
+.content-search-clear:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.content-search-status {
+  padding: 8px 20px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.content-search-note {
+  padding: 2px 6px;
+  font-size: 10px;
+  border-radius: 999px;
+  background: rgba(204, 167, 0, 0.15);
+  color: var(--warning-color);
+  border: 1px solid rgba(204, 167, 0, 0.4);
+}
+
+.content-search-list {
+  max-height: 420px;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.content-search-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.content-search-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 20px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.content-search-item:hover,
+.content-search-item.selected {
+  background: var(--bg-hover);
+}
+
+.content-search-item.selected {
+  background: var(--bg-selected);
+}
+
+.content-search-item-icon {
+  font-size: 16px;
+  width: 24px;
+  text-align: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.content-search-item-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.content-search-item-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.content-search-item-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.content-search-item-line {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: "SF Mono", Menlo, Monaco, monospace;
+}
+
+.content-search-item-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(204, 167, 0, 0.15);
+  color: var(--warning-color);
+  border: 1px solid rgba(204, 167, 0, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.content-search-item-path {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: "SF Mono", Menlo, Monaco, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.content-search-item-snippet {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-family: "SF Mono", Menlo, Monaco, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.content-search-highlight {
+  background: rgba(0, 120, 212, 0.35);
+  color: var(--text-primary);
+  padding: 0 2px;
+  border-radius: 3px;
+}

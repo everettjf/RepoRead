@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState, useMemo, useRef, useImperativeHandle, forwardRef } from "react";
+import { Suspense, lazy, useState, useMemo, useRef, useImperativeHandle, forwardRef, useEffect } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { FileContent, RepoInfo } from "../types";
 import { ScreenshotOverlay } from "./ScreenshotOverlay";
@@ -13,6 +13,8 @@ interface CodeViewerProps {
   isLoading: boolean;
   repoInfo: RepoInfo | null;
   onRevealInTree?: () => void;
+  revealLine?: number;
+  onRevealComplete?: () => void;
   copyScreenshotToClipboard?: boolean;
   isCapturing?: boolean;
   onScreenshotSaved?: (copiedToClipboard: boolean) => void;
@@ -146,12 +148,15 @@ export const CodeViewer = forwardRef<CodeViewerHandle, CodeViewerProps>(function
   isLoading,
   repoInfo,
   onRevealInTree,
+  revealLine,
+  onRevealComplete,
   copyScreenshotToClipboard = true,
   isCapturing = false,
   onScreenshotSaved,
   onCaptureComplete,
 }, ref) {
   const [showPreview, setShowPreview] = useState(false);
+  const [editorReady, setEditorReady] = useState(false);
   const codeContentRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
 
@@ -189,6 +194,33 @@ export const CodeViewer = forwardRef<CodeViewerHandle, CodeViewerProps>(function
 
   const isMarkdown =
     filePath.endsWith(".md") || filePath.endsWith(".markdown");
+
+  useEffect(() => {
+    if (!revealLine || !content || content.is_binary) return;
+    if (isMarkdown && showPreview) {
+      setShowPreview(false);
+      return;
+    }
+
+    const editorInstance = editorRef.current;
+    if (!editorInstance || !editorReady) return;
+    const model = editorInstance.getModel();
+    if (!model) return;
+
+    const maxLine = model.getLineCount();
+    const safeLine = Math.min(Math.max(1, revealLine), maxLine);
+    const maxColumn = model.getLineMaxColumn(safeLine);
+    editorInstance.setSelection({
+      startLineNumber: safeLine,
+      startColumn: 1,
+      endLineNumber: safeLine,
+      endColumn: maxColumn,
+    });
+    editorInstance.setPosition({ lineNumber: safeLine, column: 1 });
+    editorInstance.revealLineInCenter(safeLine);
+    editorInstance.focus();
+    onRevealComplete?.();
+  }, [revealLine, content, showPreview, isMarkdown, onRevealComplete, editorReady]);
 
   if (isLoading) {
     return (
@@ -294,6 +326,7 @@ export const CodeViewer = forwardRef<CodeViewerHandle, CodeViewerProps>(function
               theme="vs-dark"
               onMount={(editor) => {
                 editorRef.current = editor;
+                setEditorReady(true);
               }}
               options={{
                 readOnly: true,

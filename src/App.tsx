@@ -7,6 +7,7 @@ import { CodeViewer, type CodeViewerHandle } from "./components/CodeViewer";
 import { InterpretModal } from "./components/InterpretModal";
 import { RepoList } from "./components/RepoList";
 import { FileSearch } from "./components/FileSearch";
+import { ContentSearch } from "./components/ContentSearch";
 import { FileHistory } from "./components/FileHistory";
 import { ChatSidebar } from "./components/ChatSidebar";
 import { ResizableSidebar } from "./components/ResizableSidebar";
@@ -610,6 +611,7 @@ function App() {
 
   // File Search
   const [fileSearchOpen, setFileSearchOpen] = useState(false);
+  const [contentSearchOpen, setContentSearchOpen] = useState(false);
 
   // File History
   const [fileHistory, setFileHistory] = useState<FileHistoryEntry[]>([]);
@@ -621,6 +623,8 @@ function App() {
   const [chatOpen, setChatOpen] = useState(false);
   const [selectedText, setSelectedText] = useState("");
   const [chatPinned, setChatPinned] = useState(false);
+
+  const [pendingReveal, setPendingReveal] = useState<{ path: string; line: number } | null>(null);
 
   // Favorites lookup set for quick check
   const favoriteKeys = new Set(favorites.map((f) => `${f.owner}/${f.repo}`));
@@ -639,6 +643,10 @@ function App() {
         e.preventDefault();
         setFileSearchOpen(true);
       }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "f" && view === "repo") {
+        e.preventDefault();
+        setContentSearchOpen(true);
+      }
     };
 
     document.addEventListener("keydown", handleKeyDown);
@@ -656,6 +664,7 @@ function App() {
 
   useEffect(() => {
     setNavState({ history: [], index: -1 });
+    setPendingReveal(null);
   }, [currentRepo?.key]);
 
   const loadFileHistory = async (repoUrl: string) => {
@@ -887,6 +896,22 @@ function App() {
     [openFile]
   );
 
+  const handleContentResultSelect = useCallback(
+    async (path: string, line: number) => {
+      await openFile(path, true);
+      setPendingReveal({ path, line });
+    },
+    [openFile]
+  );
+
+  const readFileContentForSearch = useCallback(
+    async (path: string) => {
+      if (!currentRepo) throw new Error("No repo loaded");
+      return readTextFile(currentRepo.key, path);
+    },
+    [currentRepo]
+  );
+
   const handleRevealInTree = useCallback(() => {
     if (!selectedPath) return;
     setRevealRequestId((prev) => prev + 1);
@@ -915,6 +940,7 @@ function App() {
     setFileContent(null);
     setSelectedPath("");
     setError("");
+    setPendingReveal(null);
   };
 
   const handleSaveSettings = async (newSettings: AppSettings) => {
@@ -1318,6 +1344,13 @@ function App() {
         <div className="repo-header-actions">
           <button
             className="toolbar-button"
+            onClick={() => setContentSearchOpen(true)}
+            title="Find in files (⌘⇧F)"
+          >
+            🔎 Find Content
+          </button>
+          <button
+            className="toolbar-button"
             onClick={() => setFileSearchOpen(true)}
             title="Quick open file (⌘P)"
           >
@@ -1388,6 +1421,8 @@ function App() {
             isLoading={isLoadingFile}
             repoInfo={currentRepo}
             onRevealInTree={handleRevealInTree}
+            revealLine={pendingReveal?.path === selectedPath ? pendingReveal.line : undefined}
+            onRevealComplete={() => setPendingReveal(null)}
             copyScreenshotToClipboard={settings.copy_screenshot_to_clipboard}
             isCapturing={isCapturing}
             onCaptureComplete={() => setIsCapturing(false)}
@@ -1434,6 +1469,14 @@ function App() {
         onClose={() => setFileSearchOpen(false)}
         tree={tree}
         onFileSelect={handleFileSelect}
+      />
+
+      <ContentSearch
+        isOpen={contentSearchOpen}
+        onClose={() => setContentSearchOpen(false)}
+        tree={tree}
+        readFileContent={readFileContentForSearch}
+        onResultSelect={handleContentResultSelect}
       />
 
       <ChatSidebar

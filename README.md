@@ -46,10 +46,29 @@ Download the latest `.dmg` from [Releases](https://github.com/everettjf/RepoRead
 
 ### Build from Source
 
-Prerequisites:
-- [Rust](https://rustup.rs/)
-- [Bun](https://bun.sh/)
+1) Install Rust (via rustup)
+- macOS/Linux:
+  ```bash
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+  source "$HOME/.cargo/env"
+  ```
+- Verify:
+  ```bash
+  rustc --version
+  cargo --version
+  ```
 
+2) Install Bun
+- macOS/Linux:
+  ```bash
+  curl -fsSL https://bun.sh/install | bash
+  ```
+- Verify:
+  ```bash
+  bun --version
+  ```
+
+3) Build and run RepoRead
 ```bash
 # Clone the repository
 git clone https://github.com/everettjf/RepoRead.git

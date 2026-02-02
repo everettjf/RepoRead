@@ -12,6 +12,7 @@ interface CodeViewerProps {
   filePath: string;
   isLoading: boolean;
   repoInfo: RepoInfo | null;
+  onRevealInTree?: () => void;
   copyScreenshotToClipboard?: boolean;
   isCapturing?: boolean;
   onScreenshotSaved?: (copiedToClipboard: boolean) => void;
@@ -144,6 +145,7 @@ export const CodeViewer = forwardRef<CodeViewerHandle, CodeViewerProps>(function
   filePath,
   isLoading,
   repoInfo,
+  onRevealInTree,
   copyScreenshotToClipboard = true,
   isCapturing = false,
   onScreenshotSaved,
@@ -228,6 +230,16 @@ export const CodeViewer = forwardRef<CodeViewerHandle, CodeViewerProps>(function
     return (
       <div className="code-viewer">
         <div className="code-header">
+          {filePath && onRevealInTree && (
+            <button
+              className="reveal-in-tree"
+              onClick={onRevealInTree}
+              title="Reveal in file tree"
+              aria-label="Reveal in file tree"
+            >
+              📍
+            </button>
+          )}
           <span className="file-path">{filePath}</span>
           <span className="language-badge">binary</span>
         </div>
@@ -241,6 +253,16 @@ export const CodeViewer = forwardRef<CodeViewerHandle, CodeViewerProps>(function
   return (
     <div className="code-viewer">
       <div className="code-header">
+        {filePath && onRevealInTree && (
+          <button
+            className="reveal-in-tree"
+            onClick={onRevealInTree}
+            title="Reveal in file tree"
+            aria-label="Reveal in file tree"
+          >
+            📍
+          </button>
+        )}
         <span className="file-path">{filePath}</span>
         {content.truncated && (
           <span className="truncated-badge">

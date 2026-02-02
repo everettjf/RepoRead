@@ -534,9 +534,14 @@ function App() {
   const [currentRepo, setCurrentRepo] = useState<RepoInfo | null>(null);
   const [tree, setTree] = useState<FileNode | null>(null);
   const [selectedPath, setSelectedPath] = useState<string>("");
+  const [revealRequestId, setRevealRequestId] = useState(0);
   const [fileContent, setFileContent] = useState<FileContent | null>(null);
   const [isLoadingFile, setIsLoadingFile] = useState(false);
   const [error, setError] = useState<string>("");
+  const [navState, setNavState] = useState<{ history: string[]; index: number }>({
+    history: [],
+    index: -1,
+  });
 
   // Unified input state
   const [input, setInput] = useState("");
@@ -647,6 +652,10 @@ function App() {
       setFileHistory([]);
     }
   }, [currentRepo?.url]);
+
+  useEffect(() => {
+    setNavState({ history: [], index: -1 });
+  }, [currentRepo?.key]);
 
   const loadFileHistory = async (repoUrl: string) => {
     try {
@@ -832,8 +841,8 @@ function App() {
     }
   };
 
-  const handleFileSelect = useCallback(
-    async (path: string) => {
+  const openFile = useCallback(
+    async (path: string, recordHistory = true) => {
       if (!currentRepo || !path) return;
 
       setSelectedPath(path);
@@ -856,9 +865,47 @@ function App() {
       } finally {
         setIsLoadingFile(false);
       }
+
+      if (recordHistory) {
+        setNavState((prev) => {
+          const trimmed = prev.history.slice(0, prev.index + 1);
+          if (trimmed[trimmed.length - 1] === path) {
+            return { history: trimmed, index: trimmed.length - 1 };
+          }
+          return { history: [...trimmed, path], index: trimmed.length };
+        });
+      }
     },
     [currentRepo]
   );
+
+  const handleFileSelect = useCallback(
+    async (path: string) => {
+      await openFile(path, true);
+    },
+    [openFile]
+  );
+
+  const handleRevealInTree = useCallback(() => {
+    if (!selectedPath) return;
+    setRevealRequestId((prev) => prev + 1);
+  }, [selectedPath]);
+
+  const handleNavigateBack = useCallback(() => {
+    if (navState.index <= 0) return;
+    const nextIndex = navState.index - 1;
+    const path = navState.history[nextIndex];
+    setNavState((prev) => ({ ...prev, index: nextIndex }));
+    void openFile(path, false);
+  }, [navState, openFile]);
+
+  const handleNavigateForward = useCallback(() => {
+    if (navState.index < 0 || navState.index >= navState.history.length - 1) return;
+    const nextIndex = navState.index + 1;
+    const path = navState.history[nextIndex];
+    setNavState((prev) => ({ ...prev, index: nextIndex }));
+    void openFile(path, false);
+  }, [navState, openFile]);
 
   const handleBack = () => {
     setView("home");
@@ -1320,6 +1367,14 @@ function App() {
               tree={tree}
               onFileSelect={handleFileSelect}
               selectedPath={selectedPath}
+              revealPath={selectedPath}
+              revealRequestId={revealRequestId}
+              onNavigateBack={handleNavigateBack}
+              onNavigateForward={handleNavigateForward}
+              canNavigateBack={navState.index > 0}
+              canNavigateForward={
+                navState.index >= 0 && navState.index < navState.history.length - 1
+              }
             />
           )}
         </ResizableSidebar>
@@ -1331,6 +1386,7 @@ function App() {
             filePath={selectedPath}
             isLoading={isLoadingFile}
             repoInfo={currentRepo}
+            onRevealInTree={handleRevealInTree}
             copyScreenshotToClipboard={settings.copy_screenshot_to_clipboard}
             isCapturing={isCapturing}
             onCaptureComplete={() => setIsCapturing(false)}

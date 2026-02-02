@@ -1,10 +1,16 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import type { FileNode } from "../types";
 
 interface FileTreeProps {
   tree: FileNode;
   onFileSelect: (path: string) => void;
   selectedPath?: string;
+  revealPath?: string;
+  revealRequestId?: number;
+  onNavigateBack?: () => void;
+  onNavigateForward?: () => void;
+  canNavigateBack?: boolean;
+  canNavigateForward?: boolean;
 }
 
 interface TreeNodeProps {
@@ -14,10 +20,11 @@ interface TreeNodeProps {
   selectedPath?: string;
   expandedPaths: Set<string>;
   onToggle: (path: string) => void;
+  forceExpand?: boolean;
 }
 
-function TreeNode({ node, depth, onFileSelect, selectedPath, expandedPaths, onToggle }: TreeNodeProps) {
-  const expanded = expandedPaths.has(node.path);
+function TreeNode({ node, depth, onFileSelect, selectedPath, expandedPaths, onToggle, forceExpand }: TreeNodeProps) {
+  const expanded = forceExpand ? true : expandedPaths.has(node.path);
   const isSelected = selectedPath === node.path;
 
   const handleClick = useCallback(() => {
@@ -65,6 +72,7 @@ function TreeNode({ node, depth, onFileSelect, selectedPath, expandedPaths, onTo
       <div
         className={`tree-item ${isSelected ? "selected" : ""} ${node.is_dir ? "dir" : "file"}`}
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
+        data-path={node.path}
         onClick={handleClick}
       >
         <span className="tree-icon">{getFileIcon(node.name, node.is_dir)}</span>
@@ -84,6 +92,7 @@ function TreeNode({ node, depth, onFileSelect, selectedPath, expandedPaths, onTo
               selectedPath={selectedPath}
               expandedPaths={expandedPaths}
               onToggle={onToggle}
+              forceExpand={forceExpand}
             />
           ))}
         </div>
@@ -111,8 +120,61 @@ function collectDirPaths(node: FileNode, paths: string[] = []): string[] {
   return paths;
 }
 
-export function FileTree({ tree, onFileSelect, selectedPath }: FileTreeProps) {
+function filterTreeNode(node: FileNode, query: string): FileNode | null {
+  const match = node.name.toLowerCase().includes(query);
+  if (!node.is_dir) {
+    return match ? node : null;
+  }
+
+  const children = node.children || [];
+  const filteredChildren = children
+    .map((child) => filterTreeNode(child, query))
+    .filter((child): child is FileNode => Boolean(child));
+
+  if (match || filteredChildren.length > 0) {
+    return {
+      ...node,
+      children: filteredChildren,
+    };
+  }
+  return null;
+}
+
+function buildAncestorPaths(path: string): string[] {
+  if (!path) return [];
+  const parts = path.split("/").filter(Boolean);
+  const ancestors: string[] = [];
+  for (let i = 1; i < parts.length; i++) {
+    ancestors.push(parts.slice(0, i).join("/"));
+  }
+  return ancestors;
+}
+
+function getSafeSelector(path: string): string {
+  if (typeof window !== "undefined" && window.CSS && window.CSS.escape) {
+    return window.CSS.escape(path);
+  }
+  return path.replace(/["\\]/g, "\\$&");
+}
+
+export function FileTree({
+  tree,
+  onFileSelect,
+  selectedPath,
+  revealPath,
+  revealRequestId,
+  onNavigateBack,
+  onNavigateForward,
+  canNavigateBack,
+  canNavigateForward,
+}: FileTreeProps) {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+  const [filterText, setFilterText] = useState("");
+  const treeContentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setFilterText("");
+  }, [tree.path, tree.name]);
 
   const allDirPaths = useMemo(() => {
     const paths: string[] = [];
@@ -144,6 +206,35 @@ export function FileTree({ tree, onFileSelect, selectedPath }: FileTreeProps) {
     setExpandedPaths(new Set());
   }, []);
 
+  const filterQuery = filterText.trim().toLowerCase();
+  const isFiltering = filterQuery.length > 0;
+
+  const filteredChildren = useMemo(() => {
+    if (!tree.children) return [];
+    if (!isFiltering) return tree.children;
+    return tree.children
+      .map((child) => filterTreeNode(child, filterQuery))
+      .filter((child): child is FileNode => Boolean(child));
+  }, [tree.children, filterQuery, isFiltering]);
+
+  useEffect(() => {
+    if (!revealPath) return;
+    const ancestors = buildAncestorPaths(revealPath);
+    setExpandedPaths((prev) => {
+      const next = new Set(prev);
+      for (const ancestor of ancestors) {
+        next.add(ancestor);
+      }
+      return next;
+    });
+
+    const selector = `[data-path="${getSafeSelector(revealPath)}"]`;
+    requestAnimationFrame(() => {
+      const target = treeContentRef.current?.querySelector(selector);
+      target?.scrollIntoView({ block: "center" });
+    });
+  }, [revealPath, revealRequestId]);
+
   if (!tree.children || tree.children.length === 0) {
     return <div className="file-tree empty">No files</div>;
   }
@@ -154,6 +245,22 @@ export function FileTree({ tree, onFileSelect, selectedPath }: FileTreeProps) {
         <span className="tree-icon">📦</span>
         <span className="tree-name">{tree.name}</span>
         <div className="tree-actions">
+          <button
+            className="tree-action-btn"
+            onClick={onNavigateBack}
+            title="Back"
+            disabled={!canNavigateBack}
+          >
+            ◀
+          </button>
+          <button
+            className="tree-action-btn"
+            onClick={onNavigateForward}
+            title="Forward"
+            disabled={!canNavigateForward}
+          >
+            ▶
+          </button>
           <button className="tree-action-btn" onClick={handleExpandAll} title="Expand All">
             ⊞
           </button>
@@ -162,8 +269,8 @@ export function FileTree({ tree, onFileSelect, selectedPath }: FileTreeProps) {
           </button>
         </div>
       </div>
-      <div className="tree-content">
-        {tree.children.map((child) => (
+      <div className="tree-content" ref={treeContentRef}>
+        {filteredChildren.map((child) => (
           <TreeNode
             key={child.path}
             node={child}
@@ -172,8 +279,18 @@ export function FileTree({ tree, onFileSelect, selectedPath }: FileTreeProps) {
             selectedPath={selectedPath}
             expandedPaths={expandedPaths}
             onToggle={handleToggle}
+            forceExpand={isFiltering}
           />
         ))}
+      </div>
+      <div className="tree-filter">
+        <input
+          type="text"
+          className="tree-filter-input"
+          placeholder="Filter files and folders"
+          value={filterText}
+          onChange={(e) => setFilterText(e.target.value)}
+        />
       </div>
     </div>
   );

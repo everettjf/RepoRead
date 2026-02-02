@@ -1408,6 +1408,11 @@ body {
   border-color: var(--accent-color);
 }
 
+.tree-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .tree-item {
   display: flex;
   align-items: center;
@@ -1444,6 +1449,27 @@ body {
   margin-left: 8px;
 }
 
+.tree-filter {
+  padding: 10px 12px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+}
+
+.tree-filter-input {
+  width: 100%;
+  height: 30px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 12px;
+  padding: 0 10px;
+}
+
+.tree-filter-input::placeholder {
+  color: var(--text-muted);
+}
+
 /* Main Content */
 .main-content {
   flex: 1;
@@ -1473,6 +1499,27 @@ body {
   padding: 10px 16px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
+}
+
+.reveal-in-tree {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.reveal-in-tree:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--accent-color);
 }
 
 .file-path {

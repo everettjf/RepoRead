@@ -636,6 +636,23 @@ function App() {
     loadFavorites();
   }, []);
 
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("reporead:chatPinned");
+      if (saved === "true") setChatPinned(true);
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("reporead:chatPinned", chatPinned ? "true" : "false");
+    } catch {
+      // ignore storage errors
+    }
+  }, [chatPinned]);
+
   // Keyboard shortcut for file search (Cmd+P / Ctrl+P)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

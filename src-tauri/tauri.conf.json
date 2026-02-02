@@ -36,6 +36,7 @@
     ],
     "shortDescription": "Read GitHub repositories on iPad",
     "macOS": {
+      "bundleName": "RepoRead",
       "signingIdentity": "3rd Party Mac Developer Application: Feng Zhu (YPV49M8592)",
       "files": {
         "embedded.provisionprofile": "./app.provisionprofile"

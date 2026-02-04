@@ -58,6 +58,10 @@ export async function getRepoPath(repoKey: string): Promise<string> {
   return invoke<string>("get_repo_path", { repoKey });
 }
 
+export async function readBinaryFileDataUrl(repoKey: string, filePath: string): Promise<string> {
+  return invoke<string>("read_binary_file_data_url", { repoKey, filePath });
+}
+
 export async function getTrendingRepos(
   language: string | null,
   since: string,

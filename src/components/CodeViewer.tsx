@@ -1,8 +1,8 @@
 import { Suspense, lazy, useState, useMemo, useRef, useImperativeHandle, forwardRef, useEffect } from "react";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { FileContent, RepoInfo } from "../types";
 import { ScreenshotOverlay } from "./ScreenshotOverlay";
-import { saveScreenshot } from "../api";
+import { getRepoPath, readBinaryFileDataUrl, saveScreenshot } from "../api";
 import type { editor } from "monaco-editor";
 
 const MonacoEditor = lazy(() => import("@monaco-editor/react"));
@@ -94,50 +94,77 @@ function BinaryFileView({
   filePath: string;
   repoInfo: RepoInfo;
 }) {
-  const githubUrl = `https://github.com/${repoInfo.owner}/${repoInfo.repo}/blob/${repoInfo.branch}/${filePath}`;
-  const rawUrl = `https://raw.githubusercontent.com/${repoInfo.owner}/${repoInfo.repo}/${repoInfo.branch}/${filePath}`;
+  const ext = filePath.split(".").pop()?.toLowerCase() || "";
+  const isImage = ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif"].includes(ext);
+  const [imageSrc, setImageSrc] = useState<string>("");
+  const [imageLoadError, setImageLoadError] = useState(false);
 
-  const handleOpenInBrowser = async () => {
-    await openUrl(githubUrl);
-  };
+  useEffect(() => {
+    if (!isImage) return;
 
-  const handleDownload = async () => {
-    await openUrl(rawUrl);
-  };
+    let cancelled = false;
 
-  // Get file extension for display
-  const ext = filePath.split(".").pop()?.toUpperCase() || "FILE";
+    const resolveLocalImagePath = async () => {
+      try {
+        const localDataUrl = await readBinaryFileDataUrl(repoInfo.key, filePath);
+
+        if (!cancelled) {
+          setImageSrc(localDataUrl);
+          setImageLoadError(false);
+        }
+      } catch {
+        if (!cancelled) {
+          setImageSrc("");
+          setImageLoadError(true);
+        }
+      }
+    };
+
+    resolveLocalImagePath();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filePath, isImage, repoInfo.key]);
+
+  const extLabel = ext.toUpperCase() || "FILE";
 
   return (
     <div className="binary-file-view">
-      <div className="binary-icon">
-        {ext === "PNG" || ext === "JPG" || ext === "JPEG" || ext === "GIF" || ext === "WEBP" || ext === "SVG"
-          ? "🖼️"
-          : ext === "PDF"
-          ? "📄"
-          : ext === "ZIP" || ext === "TAR" || ext === "GZ" || ext === "RAR"
-          ? "📦"
-          : ext === "MP3" || ext === "WAV" || ext === "OGG"
-          ? "🎵"
-          : ext === "MP4" || ext === "AVI" || ext === "MOV"
-          ? "🎬"
-          : "📁"}
-      </div>
-      <h3>Binary File</h3>
-      <p className="binary-info">This file cannot be displayed as text.</p>
-      <div className="binary-link">
-        <a href={githubUrl} target="_blank" rel="noopener noreferrer">
-          {githubUrl}
-        </a>
-      </div>
-      <div className="binary-actions">
-        <button className="binary-button" onClick={handleOpenInBrowser}>
-          Open in GitHub
-        </button>
-        <button className="binary-button secondary" onClick={handleDownload}>
-          Download
-        </button>
-      </div>
+      {isImage && (
+        <div className="binary-image-preview">
+          {!imageLoadError && imageSrc ? (
+            <img
+              src={imageSrc}
+              alt={filePath}
+              onError={() => setImageLoadError(true)}
+            />
+          ) : !imageLoadError ? (
+            <div className="binary-image-fallback">Loading local image preview...</div>
+          ) : (
+            <div className="binary-image-fallback">
+              Unable to load local image preview for this file.
+            </div>
+          )}
+        </div>
+      )}
+      {!isImage && (
+        <>
+          <div className="binary-icon">
+            {extLabel === "PDF"
+              ? "📄"
+              : extLabel === "ZIP" || extLabel === "TAR" || extLabel === "GZ" || extLabel === "RAR"
+              ? "📦"
+              : extLabel === "MP3" || extLabel === "WAV" || extLabel === "OGG"
+              ? "🎵"
+              : extLabel === "MP4" || extLabel === "AVI" || extLabel === "MOV"
+              ? "🎬"
+              : "📁"}
+          </div>
+          <h3>Binary File</h3>
+          <p className="binary-info">This file cannot be displayed as text.</p>
+        </>
+      )}
     </div>
   );
 }
@@ -157,6 +184,7 @@ export const CodeViewer = forwardRef<CodeViewerHandle, CodeViewerProps>(function
 }, ref) {
   const [showPreview, setShowPreview] = useState(false);
   const [editorReady, setEditorReady] = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState(false);
   const codeContentRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
 
@@ -194,6 +222,56 @@ export const CodeViewer = forwardRef<CodeViewerHandle, CodeViewerProps>(function
 
   const isMarkdown =
     filePath.endsWith(".md") || filePath.endsWith(".markdown");
+  const fileUrls = useMemo(() => {
+    if (!repoInfo || !filePath) return null;
+    const encodedPath = filePath
+      .split("/")
+      .map((segment) => encodeURIComponent(segment))
+      .join("/");
+    return {
+      githubUrl: `https://github.com/${repoInfo.owner}/${repoInfo.repo}/blob/${repoInfo.branch}/${encodedPath}`,
+      rawUrl: `https://raw.githubusercontent.com/${repoInfo.owner}/${repoInfo.repo}/${repoInfo.branch}/${encodedPath}`,
+    };
+  }, [repoInfo, filePath]);
+
+  const handleOpenInGitHub = async () => {
+    if (!fileUrls) return;
+    await openUrl(fileUrls.githubUrl);
+  };
+
+  const handleDownload = async () => {
+    if (!fileUrls) return;
+    await openUrl(fileUrls.rawUrl);
+  };
+
+  const handleCopyUrl = async () => {
+    if (!fileUrls) return;
+    try {
+      if (!navigator.clipboard?.writeText) return;
+      await navigator.clipboard.writeText(fileUrls.githubUrl);
+      setCopiedUrl(true);
+      window.setTimeout(() => setCopiedUrl(false), 1400);
+    } catch {
+      setCopiedUrl(false);
+    }
+  };
+
+  const handleRevealInFinder = async () => {
+    if (!repoInfo || !filePath) return;
+    try {
+      const repoPath = await getRepoPath(repoInfo.key);
+      const separator = repoPath.includes("\\") ? "\\" : "/";
+      const normalizedRepoPath = repoPath.replace(/[\\\/]+$/, "");
+      const localPath = [normalizedRepoPath, ...filePath.split("/").filter(Boolean)].join(separator);
+      await revealItemInDir(localPath);
+    } catch (error) {
+      console.error("Failed to reveal file in finder:", error);
+    }
+  };
+
+  useEffect(() => {
+    setCopiedUrl(false);
+  }, [filePath]);
 
   useEffect(() => {
     if (!revealLine || !content || content.is_binary) return;
@@ -274,6 +352,42 @@ export const CodeViewer = forwardRef<CodeViewerHandle, CodeViewerProps>(function
           )}
           <span className="file-path">{filePath}</span>
           <span className="language-badge">binary</span>
+          {fileUrls && (
+            <div className="code-header-actions">
+              <button
+                className="code-action-icon"
+                onClick={handleRevealInFinder}
+                title="Reveal in Finder"
+                aria-label="Reveal in Finder"
+              >
+                📂
+              </button>
+              <button
+                className="code-action-icon"
+                onClick={handleOpenInGitHub}
+                title="Open in GitHub"
+                aria-label="Open in GitHub"
+              >
+                ↗
+              </button>
+              <button
+                className="code-action-icon"
+                onClick={handleDownload}
+                title="Download raw file"
+                aria-label="Download raw file"
+              >
+                ⬇
+              </button>
+              <button
+                className={`code-action-icon ${copiedUrl ? "copied" : ""}`}
+                onClick={handleCopyUrl}
+                title={copiedUrl ? "URL copied" : "Copy GitHub URL"}
+                aria-label="Copy GitHub URL"
+              >
+                🔗
+              </button>
+            </div>
+          )}
         </div>
         <div className="code-content binary-content">
           <BinaryFileView filePath={filePath} repoInfo={repoInfo} />
@@ -313,6 +427,42 @@ export const CodeViewer = forwardRef<CodeViewerHandle, CodeViewerProps>(function
           </button>
         )}
         <span className="language-badge">{content.language}</span>
+        {fileUrls && (
+          <div className="code-header-actions">
+            <button
+              className="code-action-icon"
+              onClick={handleRevealInFinder}
+              title="Reveal in Finder"
+              aria-label="Reveal in Finder"
+            >
+              📂
+            </button>
+            <button
+              className="code-action-icon"
+              onClick={handleOpenInGitHub}
+              title="Open in GitHub"
+              aria-label="Open in GitHub"
+            >
+              ↗
+            </button>
+            <button
+              className="code-action-icon"
+              onClick={handleDownload}
+              title="Download raw file"
+              aria-label="Download raw file"
+            >
+              ⬇
+            </button>
+            <button
+              className={`code-action-icon ${copiedUrl ? "copied" : ""}`}
+              onClick={handleCopyUrl}
+              title={copiedUrl ? "URL copied" : "Copy GitHub URL"}
+              aria-label="Copy GitHub URL"
+            >
+              🔗
+            </button>
+          </div>
+        )}
       </div>
       <div className="code-content" ref={codeContentRef}>
         {isMarkdown && showPreview ? (

@@ -549,6 +549,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
   const [importingRepo, setImportingRepo] = useState<string | null>(null);
+  const [updatingRepoKey, setUpdatingRepoKey] = useState<string | null>(null);
 
   // Settings
   const [settings, setSettings] = useState<AppSettings>({
@@ -868,6 +869,33 @@ function App() {
     }
   };
 
+  const handleRepoUpdate = async (repoKey: string) => {
+    if (updatingRepoKey) return;
+    const repo = recentRepos.find((item) => item.key === repoKey);
+    if (!repo) return;
+    if (!confirm(`Update ${repo.owner}/${repo.repo}? This will delete the local copy and download the latest version.`)) {
+      return;
+    }
+
+    try {
+      setUpdatingRepoKey(repoKey);
+      await deleteRepo(repoKey);
+      const result = await importRepoFromGithub(repo.url);
+      await loadRecentRepos();
+
+      if (currentRepo?.key === repoKey) {
+        setCurrentRepo(result.info);
+        setTree(result.tree);
+        setSelectedPath("");
+        setFileContent(null);
+      }
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setUpdatingRepoKey(null);
+    }
+  };
+
   const openFile = useCallback(
     async (path: string, recordHistory = true) => {
       if (!currentRepo || !path) return;
@@ -1184,6 +1212,8 @@ function App() {
               repos={recentRepos}
               onSelect={handleRepoSelect}
               onDelete={handleRepoDelete}
+              onUpdate={handleRepoUpdate}
+              updatingRepoKey={updatingRepoKey}
             />
           </>
         );
@@ -1372,7 +1402,6 @@ function App() {
           <span className="repo-name">
             {currentRepo?.owner}/{currentRepo?.repo}
           </span>
-          <span className="repo-branch">{currentRepo?.branch}</span>
         </div>
         <div className="repo-header-actions">
           <button

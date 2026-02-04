@@ -171,6 +171,7 @@ export function FileTree({
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
   const [filterText, setFilterText] = useState("");
   const treeContentRef = useRef<HTMLDivElement>(null);
+  const handledRevealRequestIdRef = useRef(0);
 
   useEffect(() => {
     setFilterText("");
@@ -218,7 +219,10 @@ export function FileTree({
   }, [tree.children, filterQuery, isFiltering]);
 
   useEffect(() => {
-    if (!revealPath) return;
+    if (!revealPath || !revealRequestId) return;
+    if (revealRequestId === handledRevealRequestIdRef.current) return;
+    handledRevealRequestIdRef.current = revealRequestId;
+
     const ancestors = buildAncestorPaths(revealPath);
     setExpandedPaths((prev) => {
       const next = new Set(prev);
@@ -231,7 +235,7 @@ export function FileTree({
     const selector = `[data-path="${getSafeSelector(revealPath)}"]`;
     requestAnimationFrame(() => {
       const target = treeContentRef.current?.querySelector(selector);
-      target?.scrollIntoView({ block: "center" });
+      target?.scrollIntoView({ block: "nearest" });
     });
   }, [revealPath, revealRequestId]);
 

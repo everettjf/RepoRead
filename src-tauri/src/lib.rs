@@ -1,5 +1,6 @@
 mod repo;
 
+use base64::Engine;
 use repo::{
     build_file_tree, delete_repo as delete_repo_impl, detect_language, download_repo_zip,
     extract_zip, generate_repo_key, get_default_branch, get_repos_dir, list_repos as list_repos_impl,
@@ -104,6 +105,33 @@ fn get_file_language(file_path: String) -> String {
 #[tauri::command]
 fn get_repo_path(repo_key: String) -> String {
     get_repos_dir().join(&repo_key).to_string_lossy().to_string()
+}
+
+#[tauri::command]
+async fn read_binary_file_data_url(repo_key: String, file_path: String) -> Result<String, RepoError> {
+    let repo_dir = get_repos_dir().join(&repo_key);
+    let full_path = repo_dir.join(&file_path);
+    let bytes = std::fs::read(&full_path)?;
+    let ext = std::path::Path::new(&file_path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    let mime = match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "bmp" => "image/bmp",
+        "ico" => "image/x-icon",
+        "avif" => "image/avif",
+        _ => "application/octet-stream",
+    };
+
+    let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+    Ok(format!("data:{};base64,{}", mime, encoded))
 }
 
 #[tauri::command]
@@ -241,6 +269,7 @@ pub fn run() {
             get_settings,
             update_settings,
             get_repo_path,
+            read_binary_file_data_url,
             get_favorites,
             save_favorites,
             export_favorites,

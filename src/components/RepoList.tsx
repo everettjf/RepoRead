@@ -7,6 +7,8 @@ interface RepoListProps {
   repos: RepoInfo[];
   onSelect: (repo: RepoInfo) => void;
   onDelete: (repoKey: string) => void;
+  onUpdate: (repoKey: string) => void;
+  updatingRepoKey?: string | null;
 }
 
 interface ContextMenuState {
@@ -37,7 +39,7 @@ function formatRelativeTime(isoString: string): string {
   });
 }
 
-export function RepoList({ repos, onSelect, onDelete }: RepoListProps) {
+export function RepoList({ repos, onSelect, onDelete, onUpdate, updatingRepoKey }: RepoListProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     visible: false,
     x: 0,
@@ -85,6 +87,11 @@ export function RepoList({ repos, onSelect, onDelete }: RepoListProps) {
     setContextMenu((prev) => ({ ...prev, visible: false }));
   };
 
+  const handleUpdateFromMenu = () => {
+    onUpdate(contextMenu.repoKey);
+    setContextMenu((prev) => ({ ...prev, visible: false }));
+  };
+
   if (repos.length === 0) {
     return null;
   }
@@ -93,17 +100,22 @@ export function RepoList({ repos, onSelect, onDelete }: RepoListProps) {
     <div className="repo-list">
       <h3>Recent Repositories</h3>
       <div className="repo-items">
-        {repos.map((repo) => (
+        {repos.map((repo) => {
+          const isUpdating = updatingRepoKey === repo.key;
+          return (
           <div
             key={repo.key}
-            className="repo-item"
-            onContextMenu={(e) => handleContextMenu(e, repo.key)}
+            className={`repo-item ${isUpdating ? "is-updating" : ""}`}
+            onContextMenu={(e) => {
+              if (isUpdating) return;
+              handleContextMenu(e, repo.key);
+            }}
           >
-            <div className="repo-info" onClick={() => onSelect(repo)}>
+            <div className="repo-info" onClick={() => !isUpdating && onSelect(repo)}>
               <span className="repo-name">
                 {repo.owner}/{repo.repo}
               </span>
-              <span className="repo-branch">{repo.branch}</span>
+              {isUpdating && <span className="repo-updating">Updating...</span>}
               <span className="repo-date">
                 {formatRelativeTime(repo.last_opened_at || repo.imported_at)}
               </span>
@@ -112,14 +124,17 @@ export function RepoList({ repos, onSelect, onDelete }: RepoListProps) {
               className="repo-delete"
               onClick={(e) => {
                 e.stopPropagation();
+                if (isUpdating) return;
                 onDelete(repo.key);
               }}
               title="Delete repository"
+              disabled={isUpdating}
             >
               ×
             </button>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Context Menu */}
@@ -134,6 +149,9 @@ export function RepoList({ repos, onSelect, onDelete }: RepoListProps) {
         >
           <button className="context-menu-item" onClick={handleRevealInFinder}>
             Reveal in Finder
+          </button>
+          <button className="context-menu-item" onClick={handleUpdateFromMenu}>
+            Update
           </button>
           <div className="context-menu-divider" />
           <button

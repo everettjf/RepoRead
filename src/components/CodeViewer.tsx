@@ -19,6 +19,7 @@ interface CodeViewerProps {
   isCapturing?: boolean;
   onScreenshotSaved?: (copiedToClipboard: boolean) => void;
   onCaptureComplete?: () => void;
+  onToast?: (message: string) => void;
 }
 
 export interface CodeViewerHandle {
@@ -181,6 +182,7 @@ export const CodeViewer = forwardRef<CodeViewerHandle, CodeViewerProps>(function
   isCapturing = false,
   onScreenshotSaved,
   onCaptureComplete,
+  onToast,
 }, ref) {
   const [showPreview, setShowPreview] = useState(false);
   const [editorReady, setEditorReady] = useState(false);
@@ -250,6 +252,7 @@ export const CodeViewer = forwardRef<CodeViewerHandle, CodeViewerProps>(function
       if (!navigator.clipboard?.writeText) return;
       await navigator.clipboard.writeText(fileUrls.githubUrl);
       setCopiedUrl(true);
+      onToast?.("URL copied");
       window.setTimeout(() => setCopiedUrl(false), 1400);
     } catch {
       setCopiedUrl(false);

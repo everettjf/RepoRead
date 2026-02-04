@@ -1491,6 +1491,7 @@ function App() {
             onScreenshotSaved={(copied) => setToastMessage(
               copied ? "Screenshot saved & copied" : "Screenshot saved"
             )}
+            onToast={(message) => setToastMessage(message)}
           />
         </main>
 

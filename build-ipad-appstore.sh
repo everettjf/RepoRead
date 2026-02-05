@@ -7,6 +7,7 @@ cd "$ROOT_DIR"
 DEVELOPMENT_TEAM="${APPLE_DEVELOPMENT_TEAM:-YPV49M8592}"
 APPLE_ID="${APPLE_ID:-}"
 APP_SPECIFIC_PASSWORD="${APP_SPECIFIC_PASSWORD:-}"
+BUILD_DIR="$ROOT_DIR/src-tauri/gen/apple/build"
 
 if [ -z "$APPLE_ID" ] || [ -z "$APP_SPECIFIC_PASSWORD" ]; then
   echo "Error: set APPLE_ID and APP_SPECIFIC_PASSWORD for App Store upload."
@@ -14,6 +15,9 @@ if [ -z "$APPLE_ID" ] || [ -z "$APP_SPECIFIC_PASSWORD" ]; then
   echo "  APPLE_ID='you@example.com' APP_SPECIFIC_PASSWORD='xxxx-xxxx-xxxx-xxxx' ./build-ipad-appstore.sh"
   exit 1
 fi
+
+echo "Cleaning stale App Store artifacts..."
+rm -rf "$BUILD_DIR/arm64/RepoRead.ipa" "$BUILD_DIR/reporead_iOS.xcarchive"
 
 echo "Building App Store IPA..."
 APPLE_DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \

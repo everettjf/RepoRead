@@ -5,12 +5,16 @@ ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"
 
 DEVELOPMENT_TEAM="${APPLE_DEVELOPMENT_TEAM:-YPV49M8592}"
-APPLE_ID="${APPLE_ID:-}"
-APP_SPECIFIC_PASSWORD="${APP_SPECIFIC_PASSWORD:-}"
+# Support multiple common env var names.
+APPLE_ID="${APPLE_ID:-${APPSTORE_CONNECT_APPLE_ID:-${ASC_APPLE_ID:-}}}"
+APP_SPECIFIC_PASSWORD="${APP_SPECIFIC_PASSWORD:-${APPSTORE_CONNECT_APP_SPECIFIC_PASSWORD:-${ASC_APP_SPECIFIC_PASSWORD:-}}}"
 BUILD_DIR="$ROOT_DIR/src-tauri/gen/apple/build"
 
 if [ -z "$APPLE_ID" ] || [ -z "$APP_SPECIFIC_PASSWORD" ]; then
-  echo "Error: set APPLE_ID and APP_SPECIFIC_PASSWORD for App Store upload."
+  echo "Error: missing App Store credentials in environment variables."
+  echo "Supported names:"
+  echo "  APPLE_ID or APPSTORE_CONNECT_APPLE_ID or ASC_APPLE_ID"
+  echo "  APP_SPECIFIC_PASSWORD or APPSTORE_CONNECT_APP_SPECIFIC_PASSWORD or ASC_APP_SPECIFIC_PASSWORD"
   echo "Example:"
   echo "  APPLE_ID='you@example.com' APP_SPECIFIC_PASSWORD='xxxx-xxxx-xxxx-xxxx' ./build-ipad-appstore.sh"
   exit 1

@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		0E003816C692CEA7A7DD4B47 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3C76B09CC188717455DD1E5C /* Security.framework */; };
-		0E177AAAC8A2D32F79480369 /* libapp.a in Resources */ = {isa = PBXBuildFile; fileRef = 4BC940F3E89A284683B59FB8 /* libapp.a */; };
 		1B0AEE5F08475831389CCD26 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B05385A2EBC8E893B8317141 /* MetalKit.framework */; };
 		2002A9238A3709737AE7CA6E /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BDC168B5E7F69F65DC14F299 /* QuartzCore.framework */; };
 		39D25826F2D531D2E41B8B1A /* assets in Resources */ = {isa = PBXBuildFile; fileRef = E766F2F45C05E0C9F3B67A2E /* assets */; };
@@ -232,7 +231,6 @@
 				F48B8612E498BABB165F65B9 /* Assets.xcassets in Resources */,
 				B2F89AC47EC0FE38993BD7D8 /* LaunchScreen.storyboard in Resources */,
 				39D25826F2D531D2E41B8B1A /* assets in Resources */,
-				0E177AAAC8A2D32F79480369 /* libapp.a in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

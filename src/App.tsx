@@ -1337,7 +1337,7 @@ function App() {
             ⚙️
           </button>
           <div className="header-content">
-            <span className="app-logo">📖</span>
+            <img className="app-logo" src="/appicon.png" alt="RepoRead" />
             <h1>RepoRead</h1>
           </div>
           <p className="tagline">Read GitHub repositories. No clone. No setup. Just code.</p>

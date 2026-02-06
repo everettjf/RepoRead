@@ -44,6 +44,13 @@ A lightweight desktop app for browsing GitHub repositories without cloning. Perf
 
 Download the latest `.dmg` from [Releases](https://github.com/everettjf/RepoRead/releases) and drag to Applications.
 
+### Homebrew (macOS)
+
+```bash
+brew tap everettjf/tap
+brew install --cask reporead
+```
+
 ### Build from Source
 
 1) Install Rust (via rustup)

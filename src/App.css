@@ -99,8 +99,11 @@ body {
 }
 
 .app-logo {
-  font-size: 48px;
+  width: 52px;
+  height: 52px;
   margin-right: 4px;
+  object-fit: contain;
+  display: inline-block;
 }
 
 .settings-button {

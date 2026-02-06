@@ -7,6 +7,12 @@ This guide covers local development, contribution workflow, and Homebrew release
 - Rust (rustup)
 - Bun
 - macOS for building and testing the `.dmg` bundle
+- GitHub CLI (`gh`) for release automation
+
+Install `gh`:
+```bash
+brew install gh
+```
 
 ## Setup
 
@@ -45,6 +51,22 @@ bun run tauri build
 Tap repo: `https://github.com/everettjf/homebrew-tap`  
 Cask: `Casks/reporead.rb`
 
+### Automated (recommended)
+
+Requires `gh auth login` first.
+
+```bash
+scripts/release_homebrew.sh
+```
+
+What it does:
+- Bumps patch version and creates tag `vX.Y.Z`
+- Builds the `.dmg`
+- Creates GitHub release `vX.Y.Z` and uploads the `.dmg`
+- Updates `everettjf/homebrew-tap` cask with new version and SHA256
+
+### Manual
+
 1) Bump patch version:
 ```bash
 ./inc_patch_version.sh
@@ -73,7 +95,7 @@ cask "reporead" do
   desc "Read GitHub repositories. No clone. No setup. Just code."
   homepage "https://github.com/everettjf/RepoRead"
 
-  app "RepoRead.app"
+ app "RepoRead.app"
 end
 ```
 

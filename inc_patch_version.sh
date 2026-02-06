@@ -25,7 +25,7 @@ sed -i '' "s/\"version\": \"$CURRENT_VERSION\"/\"version\": \"$NEW_VERSION\"/" s
 git add .
 git commit -m "new version: $NEW_VERSION"
 git push
-git tag $NEW_VERSION
+git tag v$NEW_VERSION
 git push --tags
 
 

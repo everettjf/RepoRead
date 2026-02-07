@@ -3,10 +3,15 @@ set -euo pipefail
 
 ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 REPO_DIR="$ROOT_DIR"
+TAURI_HOME_BREW_CONFIG="$REPO_DIR/src-tauri/tauri.conf.homebrew.json"
 TAP_DIR_DEFAULT="$ROOT_DIR/../homebrew-tap"
 TAP_DIR="${TAP_DIR:-$TAP_DIR_DEFAULT}"
 TAP_REPO="everettjf/homebrew-tap"
 CASK_PATH="Casks/reporead.rb"
+NOTARYTOOL_PROFILE="${NOTARYTOOL_PROFILE:-}"
+APPLE_ID="${APPLE_ID:-}"
+APPLE_TEAM_ID="${APPLE_TEAM_ID:-}"
+APPLE_APP_SPECIFIC_PASSWORD="${APPLE_APP_SPECIFIC_PASSWORD:-}"
 
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -19,9 +24,27 @@ require_cmd bun
 require_cmd git
 require_cmd gh
 require_cmd shasum
+require_cmd xcrun
+require_cmd codesign
+require_cmd spctl
 
 if ! gh auth status >/dev/null 2>&1; then
   echo "GitHub CLI not authenticated. Run: gh auth login" >&2
+  exit 1
+fi
+
+if [ ! -f "$TAURI_HOME_BREW_CONFIG" ]; then
+  echo "Missing config: $TAURI_HOME_BREW_CONFIG" >&2
+  exit 1
+fi
+
+if [ -z "$NOTARYTOOL_PROFILE" ] && { [ -z "$APPLE_ID" ] || [ -z "$APPLE_TEAM_ID" ] || [ -z "$APPLE_APP_SPECIFIC_PASSWORD" ]; }; then
+  cat >&2 <<EOF
+Notarization credentials missing.
+Set one of:
+  1) NOTARYTOOL_PROFILE=<keychain-profile-name>
+  2) APPLE_ID + APPLE_TEAM_ID + APPLE_APP_SPECIFIC_PASSWORD
+EOF
   exit 1
 fi
 
@@ -32,7 +55,7 @@ cd "$REPO_DIR"
 VERSION=$(bun -e "console.log(require('./package.json').version)")
 TAG="v$VERSION"
 
-bun run tauri build
+bun run tauri build --config "$TAURI_HOME_BREW_CONFIG"
 
 DMG_PATH=$(ls -t "src-tauri/target/release/bundle/dmg/RepoRead_${VERSION}_"*.dmg 2>/dev/null | head -1 || true)
 if [ -z "$DMG_PATH" ]; then
@@ -49,6 +72,35 @@ if [ "$(basename "$DMG_PATH")" != "RepoRead.dmg" ]; then
   cp -f "$DMG_PATH" "$RELEASE_DMG_PATH"
 else
   RELEASE_DMG_PATH="$DMG_PATH"
+fi
+
+echo "Submitting DMG for notarization..."
+if [ -n "$NOTARYTOOL_PROFILE" ]; then
+  xcrun notarytool submit "$RELEASE_DMG_PATH" --keychain-profile "$NOTARYTOOL_PROFILE" --wait
+else
+  xcrun notarytool submit "$RELEASE_DMG_PATH" \
+    --apple-id "$APPLE_ID" \
+    --team-id "$APPLE_TEAM_ID" \
+    --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+    --wait
+fi
+
+echo "Stapling notarization ticket..."
+xcrun stapler staple "$RELEASE_DMG_PATH"
+xcrun stapler validate "$RELEASE_DMG_PATH"
+
+echo "Verifying app signature and Gatekeeper assessment..."
+APP_PATH=$(ls -td src-tauri/target/release/bundle/macos/*.app 2>/dev/null | head -1 || true)
+if [ -z "$APP_PATH" ]; then
+  echo "No .app found at src-tauri/target/release/bundle/macos/" >&2
+  exit 1
+fi
+
+codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+spctl --assess -vv "$APP_PATH"
+if ! codesign -dv --verbose=4 "$APP_PATH" 2>&1 | grep -q "Developer ID Application"; then
+  echo "Expected Developer ID Application signature for Homebrew distribution." >&2
+  exit 1
 fi
 
 RELEASE_ASSETS=("$RELEASE_DMG_PATH")

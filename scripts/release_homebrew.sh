@@ -34,7 +34,10 @@ TAG="v$VERSION"
 
 bun run tauri build
 
-DMG_PATH=$(ls -t src-tauri/target/release/bundle/dmg/*.dmg 2>/dev/null | head -1 || true)
+DMG_PATH=$(ls -t "src-tauri/target/release/bundle/dmg/RepoRead_${VERSION}_"*.dmg 2>/dev/null | head -1 || true)
+if [ -z "$DMG_PATH" ]; then
+  DMG_PATH=$(ls -t src-tauri/target/release/bundle/dmg/*.dmg 2>/dev/null | head -1 || true)
+fi
 if [ -z "$DMG_PATH" ]; then
   echo "No .dmg found at src-tauri/target/release/bundle/dmg/" >&2
   exit 1
@@ -48,10 +51,15 @@ else
   RELEASE_DMG_PATH="$DMG_PATH"
 fi
 
+RELEASE_ASSETS=("$RELEASE_DMG_PATH")
+if [ "$DMG_PATH" != "$RELEASE_DMG_PATH" ]; then
+  RELEASE_ASSETS+=("$DMG_PATH")
+fi
+
 if gh release view "$TAG" >/dev/null 2>&1; then
-  echo "Release $TAG already exists. Skipping create." >&2
+  gh release upload "$TAG" "${RELEASE_ASSETS[@]}" --clobber
 else
-  gh release create "$TAG" "$RELEASE_DMG_PATH" -t "$TAG" -n "RepoRead $TAG"
+  gh release create "$TAG" "${RELEASE_ASSETS[@]}" -t "$TAG" -n "RepoRead $TAG"
 fi
 
 SHA256=$(shasum -a 256 "$RELEASE_DMG_PATH" | awk '{print $1}')

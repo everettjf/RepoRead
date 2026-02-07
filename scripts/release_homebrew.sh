@@ -12,7 +12,36 @@ SIGNING_IDENTITY="${SIGNING_IDENTITY:-Developer ID Application: Feng Zhu (YPV49M
 NOTARYTOOL_PROFILE="${NOTARYTOOL_PROFILE:-}"
 APPLE_ID="${APPLE_ID:-}"
 APPLE_TEAM_ID="${APPLE_TEAM_ID:-}"
-APPLE_APP_SPECIFIC_PASSWORD="${APPLE_APP_SPECIFIC_PASSWORD:-}"
+APPLE_APP_SPECIFIC_PASSWORD="${APPLE_APP_SPECIFIC_PASSWORD:-${APPLE_PASSWORD:-${APP_SPECIFIC_PASSWORD:-}}}"
+VERSION_FILES=("package.json" "src-tauri/Cargo.toml" "src-tauri/tauri.conf.json")
+SKIP_BUMP="${SKIP_BUMP:-0}"
+
+read_version() {
+  node -p "require('$REPO_DIR/package.json').version"
+}
+
+bump_patch_version() {
+  node -e "
+const fs = require('fs');
+const path = '$REPO_DIR/package.json';
+const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+const parts = pkg.version.split('.').map(Number);
+if (parts.length !== 3 || parts.some(Number.isNaN)) {
+  throw new Error('Invalid package.json version: ' + pkg.version);
+}
+parts[2] += 1;
+pkg.version = parts.join('.');
+fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\\n');
+console.log(pkg.version);
+"
+}
+
+update_tauri_version() {
+  local old_version="$1"
+  local new_version="$2"
+  sed -i '' "s/^version = \"$old_version\"/version = \"$new_version\"/" "$REPO_DIR/src-tauri/Cargo.toml"
+  sed -i '' "s/\"version\": \"$old_version\"/\"version\": \"$new_version\"/" "$REPO_DIR/src-tauri/tauri.conf.json"
+}
 
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -25,6 +54,7 @@ require_cmd bun
 require_cmd git
 require_cmd gh
 require_cmd shasum
+require_cmd node
 require_cmd xcrun
 require_cmd codesign
 require_cmd spctl
@@ -62,23 +92,57 @@ fi
 
 cd "$REPO_DIR"
 
-./inc_patch_version.sh
+if [ "$SKIP_BUMP" != "1" ] && ! git diff --quiet -- "${VERSION_FILES[@]}"; then
+  echo "Version files have local changes. Commit or stash them first:" >&2
+  printf '  %s\n' "${VERSION_FILES[@]}" >&2
+  exit 1
+fi
 
-VERSION=$(bun -e "console.log(require('./package.json').version)")
+VERSION=$(read_version)
 TAG="v$VERSION"
+DID_BUMP=0
+
+if [ "$SKIP_BUMP" = "1" ]; then
+  echo "SKIP_BUMP=1, publishing current version: $VERSION"
+else
+  OLD_VERSION="$VERSION"
+  NEW_VERSION=$(bump_patch_version)
+  update_tauri_version "$OLD_VERSION" "$NEW_VERSION"
+
+  VERSION=$(read_version)
+  if [ "$VERSION" != "$NEW_VERSION" ]; then
+    echo "Version mismatch after bump: expected $NEW_VERSION, got $VERSION" >&2
+    exit 1
+  fi
+  DID_BUMP=1
+fi
+
+TAG="v$VERSION"
+if [ "$SKIP_BUMP" != "1" ] && git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+  echo "Tag already exists: $TAG" >&2
+  exit 1
+fi
+
+if ! git diff --quiet -- "$REPO_DIR/package.json" "$REPO_DIR/src-tauri/Cargo.toml" "$REPO_DIR/src-tauri/tauri.conf.json"; then
+  echo "Version files updated to $VERSION"
+fi
 
 TMP_CONFIG="$REPO_DIR/src-tauri/tauri.conf.homebrew.generated.json"
-trap 'rm -f "$TMP_CONFIG"' EXIT
+RELEASE_DONE=0
+cleanup() {
+  rm -f "$TMP_CONFIG"
+  if [ "$RELEASE_DONE" -eq 0 ] && [ "$DID_BUMP" -eq 1 ]; then
+    git checkout -- "${VERSION_FILES[@]}" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
 sed "s|Developer ID Application: Feng Zhu (YPV49M8592)|$SIGNING_IDENTITY|g" "$TAURI_HOME_BREW_CONFIG" > "$TMP_CONFIG"
 
-bun run tauri build --config "$TMP_CONFIG"
+APPLE_PASSWORD="$APPLE_APP_SPECIFIC_PASSWORD" bun run tauri build --config "$TMP_CONFIG"
 
 DMG_PATH=$(ls -t "src-tauri/target/release/bundle/dmg/RepoRead_${VERSION}_"*.dmg 2>/dev/null | head -1 || true)
 if [ -z "$DMG_PATH" ]; then
-  DMG_PATH=$(ls -t src-tauri/target/release/bundle/dmg/*.dmg 2>/dev/null | head -1 || true)
-fi
-if [ -z "$DMG_PATH" ]; then
-  echo "No .dmg found at src-tauri/target/release/bundle/dmg/" >&2
+  echo "No versioned .dmg found for $VERSION at src-tauri/target/release/bundle/dmg/" >&2
   exit 1
 fi
 
@@ -114,9 +178,13 @@ fi
 
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 spctl --assess -vv "$APP_PATH"
-if ! codesign -dv --verbose=4 "$APP_PATH" 2>&1 | grep -q "Developer ID Application"; then
-  echo "Expected Developer ID Application signature for Homebrew distribution." >&2
-  exit 1
+
+if [ "$DID_BUMP" -eq 1 ]; then
+  git add package.json src-tauri/Cargo.toml src-tauri/tauri.conf.json
+  git commit -m "new version: $VERSION"
+  git push
+  git tag "$TAG"
+  git push origin "$TAG"
 fi
 
 RELEASE_ASSETS=("$RELEASE_DMG_PATH")
@@ -150,4 +218,5 @@ git add "$CASK_PATH"
 git commit -m "bump reporead to $VERSION"
 git push
 
+RELEASE_DONE=1
 echo "Done. Released $TAG and updated Homebrew cask."

@@ -40,13 +40,21 @@ if [ -z "$DMG_PATH" ]; then
   exit 1
 fi
 
+DMG_DIR=$(dirname "$DMG_PATH")
+RELEASE_DMG_PATH="$DMG_DIR/RepoRead.dmg"
+if [ "$(basename "$DMG_PATH")" != "RepoRead.dmg" ]; then
+  cp -f "$DMG_PATH" "$RELEASE_DMG_PATH"
+else
+  RELEASE_DMG_PATH="$DMG_PATH"
+fi
+
 if gh release view "$TAG" >/dev/null 2>&1; then
   echo "Release $TAG already exists. Skipping create." >&2
 else
-  gh release create "$TAG" "$DMG_PATH" -t "$TAG" -n "RepoRead $TAG"
+  gh release create "$TAG" "$RELEASE_DMG_PATH" -t "$TAG" -n "RepoRead $TAG"
 fi
 
-SHA256=$(shasum -a 256 "$DMG_PATH" | awk '{print $1}')
+SHA256=$(shasum -a 256 "$RELEASE_DMG_PATH" | awk '{print $1}')
 
 if [ ! -d "$TAP_DIR/.git" ]; then
   git clone "https://github.com/$TAP_REPO.git" "$TAP_DIR"

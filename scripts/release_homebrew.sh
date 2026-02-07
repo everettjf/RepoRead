@@ -8,6 +8,7 @@ TAP_DIR_DEFAULT="$ROOT_DIR/../homebrew-tap"
 TAP_DIR="${TAP_DIR:-$TAP_DIR_DEFAULT}"
 TAP_REPO="everettjf/homebrew-tap"
 CASK_PATH="Casks/reporead.rb"
+SIGNING_IDENTITY="${SIGNING_IDENTITY:-Developer ID Application: Feng Zhu (YPV49M8592)}"
 NOTARYTOOL_PROFILE="${NOTARYTOOL_PROFILE:-}"
 APPLE_ID="${APPLE_ID:-}"
 APPLE_TEAM_ID="${APPLE_TEAM_ID:-}"
@@ -38,6 +39,17 @@ if [ ! -f "$TAURI_HOME_BREW_CONFIG" ]; then
   exit 1
 fi
 
+if ! security find-identity -v -p codesigning | grep -Fq "\"$SIGNING_IDENTITY\""; then
+  cat >&2 <<EOF
+Signing identity not available in keychain:
+  $SIGNING_IDENTITY
+
+Available code signing identities:
+$(security find-identity -v -p codesigning | sed 's/^/  /')
+EOF
+  exit 1
+fi
+
 if [ -z "$NOTARYTOOL_PROFILE" ] && { [ -z "$APPLE_ID" ] || [ -z "$APPLE_TEAM_ID" ] || [ -z "$APPLE_APP_SPECIFIC_PASSWORD" ]; }; then
   cat >&2 <<EOF
 Notarization credentials missing.
@@ -55,7 +67,11 @@ cd "$REPO_DIR"
 VERSION=$(bun -e "console.log(require('./package.json').version)")
 TAG="v$VERSION"
 
-bun run tauri build --config "$TAURI_HOME_BREW_CONFIG"
+TMP_CONFIG="$REPO_DIR/src-tauri/tauri.conf.homebrew.generated.json"
+trap 'rm -f "$TMP_CONFIG"' EXIT
+sed "s|Developer ID Application: Feng Zhu (YPV49M8592)|$SIGNING_IDENTITY|g" "$TAURI_HOME_BREW_CONFIG" > "$TMP_CONFIG"
+
+bun run tauri build --config "$TMP_CONFIG"
 
 DMG_PATH=$(ls -t "src-tauri/target/release/bundle/dmg/RepoRead_${VERSION}_"*.dmg 2>/dev/null | head -1 || true)
 if [ -z "$DMG_PATH" ]; then

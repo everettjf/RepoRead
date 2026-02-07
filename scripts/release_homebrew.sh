@@ -180,6 +180,7 @@ codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 spctl --assess -vv "$APP_PATH"
 
 if [ "$DID_BUMP" -eq 1 ]; then
+  git add .
   git add package.json src-tauri/Cargo.toml src-tauri/tauri.conf.json
   git commit -m "new version: $VERSION"
   git push

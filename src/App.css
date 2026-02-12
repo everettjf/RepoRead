@@ -572,7 +572,23 @@ body {
 
 .trending-item-name {
   font-weight: 600;
+  font-size: 18px;
+  line-height: 1.25;
   color: var(--text-primary);
+}
+
+.trending-item-name-link {
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.trending-item-name-link:hover {
+  color: var(--accent-color);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .trending-item-stars {

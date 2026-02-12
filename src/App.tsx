@@ -155,7 +155,14 @@ function TrendingList({
           <div key={item.full_name} className="trending-item">
             <div className="trending-item-info">
               <div className="trending-item-header">
-                <span className="trending-item-name">{item.full_name}</span>
+                <button
+                  type="button"
+                  className="trending-item-name trending-item-name-link"
+                  onClick={() => void openUrl(item.url)}
+                  title={`Open ${item.full_name} on GitHub`}
+                >
+                  {item.full_name}
+                </button>
                 {typeof item.stars === "number" && (
                   <span className="trending-item-stars">⭐ {formatStars(item.stars)}</span>
                 )}

@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 REPO_DIR="$ROOT_DIR"
 TAURI_HOME_BREW_CONFIG="$REPO_DIR/src-tauri/tauri.conf.homebrew.json"
-TAP_DIR_DEFAULT="$ROOT_DIR/../homebrew-tap"
+TAP_DIR_DEFAULT="$ROOT_DIR/tmp/homebrew-tap"
 TAP_DIR="${TAP_DIR:-$TAP_DIR_DEFAULT}"
 TAP_REPO="everettjf/homebrew-tap"
 CASK_PATH="Casks/reporead.rb"
@@ -58,6 +58,7 @@ require_cmd node
 require_cmd xcrun
 require_cmd codesign
 require_cmd spctl
+require_cmd cargo
 
 if ! gh auth status >/dev/null 2>&1; then
   echo "GitHub CLI not authenticated. Run: gh auth login" >&2
@@ -138,6 +139,10 @@ cleanup() {
 trap cleanup EXIT
 sed "s|Developer ID Application: Feng Zhu (YPV49M8592)|$SIGNING_IDENTITY|g" "$TAURI_HOME_BREW_CONFIG" > "$TMP_CONFIG"
 
+echo "Cleaning previous build artifacts..."
+cargo clean --manifest-path "$REPO_DIR/src-tauri/Cargo.toml"
+rm -rf "$REPO_DIR/src-tauri/target/release/bundle"
+
 APPLE_PASSWORD="$APPLE_APP_SPECIFIC_PASSWORD" bun run tauri build --config "$TMP_CONFIG"
 
 DMG_PATH=$(ls -t "src-tauri/target/release/bundle/dmg/RepoRead_${VERSION}_"*.dmg 2>/dev/null | head -1 || true)
@@ -201,9 +206,9 @@ fi
 
 SHA256=$(shasum -a 256 "$RELEASE_DMG_PATH" | awk '{print $1}')
 
-if [ ! -d "$TAP_DIR/.git" ]; then
-  git clone "https://github.com/$TAP_REPO.git" "$TAP_DIR"
-fi
+rm -rf "$TAP_DIR"
+mkdir -p "$(dirname "$TAP_DIR")"
+git clone "https://github.com/$TAP_REPO.git" "$TAP_DIR"
 
 cd "$TAP_DIR"
 
